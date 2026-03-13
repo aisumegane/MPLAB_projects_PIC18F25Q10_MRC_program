@@ -4,6 +4,9 @@
  *
  * Created on 2026/03/13, 23:46
  */
+ 
+#ifndef CONFIG_BITS_H
+#define	CONFIG_BITS_H
     #include <htc.h>
     
     
@@ -181,3 +184,6 @@
     /* memo                                                                                   */
     /*                                                                                        */
     /*========================================================================================*/
+    
+#endif	/* CONFIG_BITS_H */
+    

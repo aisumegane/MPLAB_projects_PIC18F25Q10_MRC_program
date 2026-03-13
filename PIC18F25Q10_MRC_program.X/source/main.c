@@ -6,6 +6,7 @@
  */
 
 #include <xc.h>
+#include "config_bits.h"
 #include "userdefine.h"     /* ※ヘッダファイル内でも定義を使用しているので、エラーが出ないよう一番最初に呼び出す※ */
 
 

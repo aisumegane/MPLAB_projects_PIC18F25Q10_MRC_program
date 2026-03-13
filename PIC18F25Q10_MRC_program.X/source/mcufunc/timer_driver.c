@@ -83,10 +83,10 @@ void td_g_ccp3_pwm_duty_set( u16 u16_duty )
     u8_duty_lower2bit = (u8)( u16_duty << 4U );        /* 0b0011-1111-1111 -> 0b0000-0011-0000 */ /* DCxB bitがある<5:4>bit目まで位置をシフト */
     
     /* duty更新 */
-    CCPR3L = u8_duty_upper8bit;                        /* duty 上位8bit 代入       */
+    //CCPR3L = u8_duty_upper8bit;                        /* duty 上位8bit 代入       */
 
-    CCP3CON &= (u8)0xCF;                               /* DCxB いったん現在値クリア */
-    CCP3CON |= u8_duty_lower2bit;                      /* duty 下位2bit 代入       */
+    //CCP3CON &= (u8)0xCF;                               /* DCxB いったん現在値クリア */
+    //CCP3CON |= u8_duty_lower2bit;                      /* duty 下位2bit 代入       */
 }
 
 

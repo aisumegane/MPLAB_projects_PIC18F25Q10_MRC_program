@@ -6,7 +6,6 @@
  */
 
 #include <xc.h>
-#include "pic16F1827.h"
 
 #include "../userdefine.h"
 

@@ -12,7 +12,7 @@
 extern "C" {
 #endif
 
-#define _XTAL_FREQ  16000000     /* 16MHz */        /* ここで定義するのは微妙かも？  @@要件等 */
+#define _XTAL_FREQ  64000000     /* 16MHz */        /* ここで定義するのは微妙かも？  @@要件等 */
 
 extern void func_mset_g_mcu_start_condition( void );
 extern void func_mset_g_init( void );

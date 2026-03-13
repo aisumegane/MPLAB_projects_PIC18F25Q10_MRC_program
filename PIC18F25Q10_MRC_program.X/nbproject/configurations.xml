@@ -29,6 +29,7 @@
           <itemPath>source/mcufunc/gpio.h</itemPath>
           <itemPath>source/mcufunc/timer_driver.c</itemPath>
           <itemPath>source/mcufunc/timer_driver.h</itemPath>
+          <itemPath>source/mcufunc/config_bits.h</itemPath>
         </logicalFolder>
         <logicalFolder name="tools" displayName="tools" projectFiles="true">
           <itemPath>source/tools/servo.c</itemPath>
@@ -54,7 +55,7 @@
     <conf name="default" type="2">
       <toolsSet>
         <developmentServer>localhost</developmentServer>
-        <targetDevice>PIC16F1827</targetDevice>
+        <targetDevice>PIC18F25Q10</targetDevice>
         <targetHeader></targetHeader>
         <targetPluginBoard></targetPluginBoard>
         <platformTool>noID</platformTool>
@@ -63,7 +64,7 @@
         <platform>3</platform>
       </toolsSet>
       <packs>
-        <pack name="PIC12-16F1xxx_DFP" vendor="Microchip" version="1.7.242"/>
+        <pack name="PIC18F-Q_DFP" vendor="Microchip" version="1.27.449"/>
       </packs>
       <ScriptingSettings>
       </ScriptingSettings>

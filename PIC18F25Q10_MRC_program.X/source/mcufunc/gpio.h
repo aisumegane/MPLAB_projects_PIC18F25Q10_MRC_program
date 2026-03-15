@@ -28,10 +28,7 @@ extern ts_gpio_in_def ts_gpio_g_in_shift_1;
 extern ts_gpio_in_def ts_gpio_g_in_shift_2;
 extern ts_gpio_in_def ts_gpio_g_in_neutral;
 
-extern u8 u8_gpio_g_out_7seg_led_data_a;
-extern u8 u8_gpio_g_out_7seg_led_data_b;
-extern u8 u8_gpio_g_out_7seg_led_data_c;
-extern u8 u8_gpio_g_out_7seg_led_data_d;
+extern u8 U8_GPIO_G_OUT_TASK_CHK;
 
 
 

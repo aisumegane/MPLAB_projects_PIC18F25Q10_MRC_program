@@ -15,17 +15,10 @@
 #define GPIO_PORT_IN_JUDGE_CNT      ((u8)2)
 
 /* 入力ポート割り当て設定 */
-#define GPIO_IN_NERUTRAL_PORT       RB0
-#define GPIO_IN_SHIFT_0_PORT        RB1
-#define GPIO_IN_SHIFT_1_PORT        RB2
-#define GPIO_IN_SHIFT_2_PORT        RB3
+
 
 /* 出力ポート割り当て設定 (レジスタ・bit指定) */
-#define GPIO_OUT_7SEG_LED_DATA_A    LATB5
-#define GPIO_OUT_7SEG_LED_DATA_B    LATA1
-#define GPIO_OUT_7SEG_LED_DATA_C    LATA0
-#define GPIO_OUT_7SEG_LED_DATA_D    LATA6
-
+#define GPIO_OUT_TASK_CHK           LATB0
 
 ts_gpio_in_def ts_gpio_g_in_shift_0;
 ts_gpio_in_def ts_gpio_g_in_shift_1;
@@ -42,6 +35,8 @@ static const ts_gpio_in_def ts_gpio_s_in_init =
 };
 
 
+/* 出力定義 */
+u8 U8_GPIO_G_OUT_TASK_CHK;
 u8 u8_gpio_g_out_7seg_led_data_a;
 u8 u8_gpio_g_out_7seg_led_data_b;
 u8 u8_gpio_g_out_7seg_led_data_c;
@@ -95,10 +90,7 @@ void func_gpio_g_init( void )
 /**************************************************************/
 static void func_gpio_s_in_judge( void )
 {
-    func_gpio_s_port_judge( ts_gpio_g_in_neutral, GPIO_IN_NERUTRAL_PORT );
-    func_gpio_s_port_judge( ts_gpio_g_in_shift_0, GPIO_IN_SHIFT_0_PORT  );
-    func_gpio_s_port_judge( ts_gpio_g_in_shift_1, GPIO_IN_SHIFT_1_PORT  );
-    func_gpio_s_port_judge( ts_gpio_g_in_shift_2, GPIO_IN_SHIFT_2_PORT  );
+    //func_gpio_s_port_judge( ts_gpio_g_in_neutral, GPIO_IN_NERUTRAL_PORT );
 }
 
 
@@ -111,10 +103,7 @@ static void func_gpio_s_in_judge( void )
 static void func_gpio_s_out_update( void )
 {
     /* 一応 0bit目 以外はマスクしておく */
-    GPIO_OUT_7SEG_LED_DATA_A = u8_gpio_g_out_7seg_led_data_a & (u8)0x01;
-    GPIO_OUT_7SEG_LED_DATA_B = u8_gpio_g_out_7seg_led_data_b & (u8)0x01;
-    GPIO_OUT_7SEG_LED_DATA_C = u8_gpio_g_out_7seg_led_data_c & (u8)0x01;
-    GPIO_OUT_7SEG_LED_DATA_D = u8_gpio_g_out_7seg_led_data_d & (u8)0x01;
+    GPIO_OUT_TASK_CHK = U8_GPIO_G_OUT_TASK_CHK & (u8)0x01;
 }
 
 

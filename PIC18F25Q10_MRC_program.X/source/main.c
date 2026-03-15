@@ -109,7 +109,6 @@ static void func_main_s_loop( void )
 
     func_shift_g_main();        /* シフトチェンジ処理 */
     func_indicate_g_main();     /* 表示処理 */
-
 }
 
 

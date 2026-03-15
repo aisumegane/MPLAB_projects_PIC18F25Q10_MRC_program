@@ -27,6 +27,7 @@ static void func_mset_s_adc_setup( void );
 static void func_mset_s_ccp_setup( void );
 static void func_mset_s_timer_setup( void );
 static void func_mset_s_timer0_setup( void );
+static void func_mset_s_timer1_setup( void );
 static void func_mset_s_timer2_setup( void );
 static void func_mset_s_timer4_setup( void );
 static void func_mset_s_timer6_setup( void );
@@ -1651,6 +1652,8 @@ static void func_mset_s_pps_setup( void )
 static void func_mset_s_timer_setup( void )
 {
     func_mset_s_timer0_setup();     /* メインタスク用 タイマ0 */
+    func_mset_s_timer1_setup();     /* モータ側 ギヤ回転数取得 ※ゲート機能仕様 */
+
 
     func_mset_s_ccp_setup();        /* CCP機能設定 */
     func_mset_s_timer2_setup();     /* シフト用サーボ 00 ※CCP機能へ割り当て中 */
@@ -1737,6 +1740,12 @@ static void func_mset_s_timer0_setup( void )
     /* memo                                                              */
     /*                                                                   */
     /*===================================================================*/
+}
+
+
+static void func_mset_s_timer1_setup( void )
+{
+    ;
 }
 
 

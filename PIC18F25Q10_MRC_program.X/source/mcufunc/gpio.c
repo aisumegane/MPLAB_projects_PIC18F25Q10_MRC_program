@@ -37,10 +37,7 @@ static const ts_gpio_in_def ts_gpio_s_in_init =
 
 /* 出力定義 */
 u8 U8_GPIO_G_OUT_TASK_CHK;
-u8 u8_gpio_g_out_7seg_led_data_a;
-u8 u8_gpio_g_out_7seg_led_data_b;
-u8 u8_gpio_g_out_7seg_led_data_c;
-u8 u8_gpio_g_out_7seg_led_data_d;
+
 
 
 /* 関数プロトタイプ宣言 */
@@ -75,11 +72,6 @@ void func_gpio_g_init( void )
     ts_gpio_g_in_shift_1 = ts_gpio_s_in_init;
     ts_gpio_g_in_shift_2 = ts_gpio_s_in_init;
     ts_gpio_g_in_neutral = ts_gpio_s_in_init;
-    
-    u8_gpio_g_out_7seg_led_data_a = CLEAR;
-    u8_gpio_g_out_7seg_led_data_b = CLEAR;
-    u8_gpio_g_out_7seg_led_data_c = CLEAR;
-    u8_gpio_g_out_7seg_led_data_d = CLEAR;
 }
 
 

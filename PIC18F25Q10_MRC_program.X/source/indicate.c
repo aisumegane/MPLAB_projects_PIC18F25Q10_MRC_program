@@ -56,27 +56,6 @@ void func_indicate_g_init( void )
 /**************************************************************/
 static void func_indicate_s_shift_posi_disp( void )
 {
-    u8 u8_shift_buff;
-    
-    u8_shift_buff = (u8)0;
-    
-    /* 0~7の計8位置。附番とずれてるのは若干ややこしいかも? */
-    if( ts_gpio_g_in_shift_0.u8_state == SET )
-    {
-        u8_shift_buff += (u8)0x01;
-    }
-    if( ts_gpio_g_in_shift_1.u8_state == SET )
-    {
-        u8_shift_buff += (u8)0x02;
-    }
-    if( ts_gpio_g_in_shift_2.u8_state == SET )
-    {
-        u8_shift_buff += (u8)0x04;
-    }
-    
-    /* 1速始まりにしたいので1加算 */
-    u8_shift_buff += (u8)1;
-    
-    func_segment_g_tc4511bp_data_set( u8_shift_buff );
+
 }
 

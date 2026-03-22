@@ -37,21 +37,21 @@ void func_segment_g_tc4511bp_data_set( u8 disp_num )
     /* ==== 2進数でのビット判定 ==== */
     if( ( disp_num & (u8)0x01 ) == (u8)0x01 )
     {
-        u8_gpio_g_out_7seg_led_data_a = SET;
+        //u8_gpio_g_out_7seg_led_data_a = SET;
     }
 
     if( ( disp_num & (u8)0x02 ) == (u8)0x02 )
     {
-        u8_gpio_g_out_7seg_led_data_b = SET;
+        //u8_gpio_g_out_7seg_led_data_b = SET;
     }
 
     if( ( disp_num & (u8)0x04 ) == (u8)0x04 )
     {
-        u8_gpio_g_out_7seg_led_data_c = SET;
+        //u8_gpio_g_out_7seg_led_data_c = SET;
     }
 
     if( ( disp_num & (u8)0x08 ) == (u8)0x08 )
     {
-        u8_gpio_g_out_7seg_led_data_d = SET;
+        //u8_gpio_g_out_7seg_led_data_d = SET;
     }
 }

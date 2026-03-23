@@ -44,6 +44,8 @@
         <itemPath>source/indicate.h</itemPath>
         <itemPath>source/shift.c</itemPath>
         <itemPath>source/shift.h</itemPath>
+        <itemPath>source/radio_control.c</itemPath>
+        <itemPath>source/radio_control.h</itemPath>
       </logicalFolder>
     </logicalFolder>
   </logicalFolder>
@@ -58,9 +60,9 @@
         <targetDevice>PIC18F25Q10</targetDevice>
         <targetHeader></targetHeader>
         <targetPluginBoard></targetPluginBoard>
-        <platformTool>PICkit3PlatformTool</platformTool>
+        <platformTool></platformTool>
         <languageToolchain>XC8</languageToolchain>
-        <languageToolchainVersion>2.41</languageToolchainVersion>
+        <languageToolchainVersion>3.10</languageToolchainVersion>
         <platform>3</platform>
       </toolsSet>
       <packs>

@@ -14,7 +14,12 @@ extern "C" {
 
 /* 共通マクロ設定 */
 #define     CLEAR   0U
+#define     OFF     0U
+#define     LOW     0U
+
 #define     SET     1U
+#define     ON      1U
+#define     HI      1U
 
 
 /* 共通型名称 */

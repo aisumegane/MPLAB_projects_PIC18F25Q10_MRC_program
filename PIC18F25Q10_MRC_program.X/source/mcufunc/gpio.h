@@ -12,6 +12,14 @@
 extern "C" {
 #endif
 
+/* 入力ポート割り当て定義 */
+#define GPIO_IN_RC_CH_SPEED                 RA0
+#define GPIO_IN_RC_CH_SHIFT_MODE            RA1
+#define GPIO_IN_RC_CH_SPEED_GAIN            RA2
+#define GPIO_IN_RC_CH_SHIFT_UPDOWN          RA3
+#define GPIO_IN_RC_CH_SHIFT_REV_LIMIT       RA4
+
+
 typedef struct gpio_in
 {
     u8 u8_judge_cnt;

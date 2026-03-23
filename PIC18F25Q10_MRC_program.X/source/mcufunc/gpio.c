@@ -6,7 +6,7 @@
  */
 
 #include <xc.h>
-
+#include "pic18F25Q10.h"
 #include "../userdefine.h"
 
 #include "gpio.h"
@@ -15,6 +15,7 @@
 #define GPIO_PORT_IN_JUDGE_CNT      ((u8)2)
 
 /* 入力ポート割り当て設定 */
+
 
 
 /* 出力ポート割り当て設定 (レジスタ・bit指定) */

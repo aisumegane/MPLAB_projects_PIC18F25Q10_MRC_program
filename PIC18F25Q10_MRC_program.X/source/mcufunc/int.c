@@ -11,20 +11,23 @@
 
 #include "adc.h"
 #include "../main.h"
+#include "../radio_control.h"
 
 #include "int.h"
 
 
 /* 割り込みフラグ bit位置定義 define */
-#define INT_FLAG_TMR0_OVF           ((u8)0x04)
+#define INT_FLAG_TMR0_OVF           TMR0IF
 #define INT_FLAG_TMR4_MATCH         ((u8)0x02)
 #define INT_FLAG_AD_COMPLITE        ((u8)0x40)
-
+#define INT_FLAG_TMR5_OVF           TMR5IF
 
 /* 関数プロトタイプ宣言 */
 static void func_int_s_timer0_ovf( void );
 static void func_int_s_timer4_match( void );
 
+
+/* duty取得処理関連 */
 
 
 /**************************************************************/
@@ -38,10 +41,10 @@ void __interrupt() isr( void )
     /* 割り込みベクタ1コですべてここに来るため、実質記述順序が割り込み優先度になる */
     /* 割り込みが同時に入った場合はこの処理の中で長い時間待機してしまう点忘れない! */
 
-    if( ( INTCON & INT_FLAG_TMR0_OVF ) != 0U )
+    if( INT_FLAG_TMR0_OVF == SET )
     { /* TMR0 オーバーフロー割り込み発生 */
         func_int_s_timer0_ovf();
-        INTCON &= (u8)~INT_FLAG_TMR0_OVF;
+        INT_FLAG_TMR0_OVF = CLEAR;
     }
 
     if( ( PIR3 & INT_FLAG_TMR4_MATCH ) != 0U )
@@ -55,6 +58,13 @@ void __interrupt() isr( void )
         func_adc_g_adc_data_get();                 /* AD変換結果格納 & 残りの変換要求を処理する */
         PIR1 &= (u8)~INT_FLAG_AD_COMPLITE;                         /* 割り込みフラグクリア */
     }
+    
+    if( INT_FLAG_TMR5_OVF == SET )
+    {
+        func_rc_g_duty_detection();         /* ラジコンプロポ duty取得処理 */
+        INT_FLAG_TMR5_OVF = CLEAR;
+    }
+    
 }
 
 

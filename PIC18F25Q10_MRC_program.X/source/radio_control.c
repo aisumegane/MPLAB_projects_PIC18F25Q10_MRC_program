@@ -18,20 +18,12 @@
 /* ※割り込み処理側をあまりごちゃごちゃにしたくないので、関連する関数ごとにファイル分けしとく※ */
 /* ！あとで定義位置要件等！ */
 /* 配列要素指定用 */
-#define RC_DUTY_IDX_SPEED                 ((u8)0)
-#define RC_DUTY_IDX_SHIFT_MODE            ((u8)1)
-#define RC_DUTY_IDX_SPEED_GAIN            ((u8)2)
-#define RC_DUTY_IDX_SHIFT_UPDOWN          ((u8)3)
-#define RC_DUTY_IDX_SHIFT_REV_LIMIT       ((u8)4)
-
-
-#define RC_INT_IOC_FLAG_SPEED             IOCAF0
-#define RC_INT_IOC_FLAG_SHIFT_MODE        IOCAF1
-#define RC_INT_IOC_FLAG_SPEED_GAIN        IOCAF2
-#define RC_INT_IOC_FLAG_SHIFT_UPDOWN      IOCAF3
-#define RC_INT_IOC_FLAG_SHIFT_REV_LIMIT   IOCAF4
-
-#define RC_INT_IOC_FLAG_NUM               ((u8)5)
+#define RC_DUTY_CH_IDX_0                  ((u8)0)
+#define RC_DUTY_CH_IDX_1                  ((u8)1)
+#define RC_DUTY_CH_IDX_2                  ((u8)2)
+#define RC_DUTY_CH_IDX_3                  ((u8)3)
+#define RC_DUTY_CH_IDX_4                  ((u8)4)
+#define RC_DUTY_CH_IDX_MAX                ((u8)RC_DUTY_CH_IDX_4+(u8)1)
 
 
 /* 設定関連 */
@@ -39,45 +31,48 @@
 #define RC_DUTY_JUDGE_TIMEOUT_CNT         ((u8)5)
 
 
-u8 u8_rc_g_duty_judge_sequence;             /* パルス幅測定シーケンス */
+u8 u8_rc_g_duty_judge_sequence;                    /* パルス幅測定シーケンス */
 
-/* マイコンレジスタでチャネル指定できる機能があるが、ややこしくなるので使わない方がいいかも */
-/* 変数宣言 */
-u8 u8_rc_g_duty_speed;              /* 前進/後進 速度入力 */
-u8 u8_rc_g_duty_shift_mode;         /* シフトチェンジモード入力 (セミオートマ/オート) */
-u8 u8_rc_g_duty_speed_gain;         /* 加速度合い(エンジン応答)入力 */
-u8 u8_rc_g_duty_shift_updown;       /* シフトアップダウン入力 */
-u8 u8_rc_g_duty_rev_limit;          /* レブリミット閾値入力 */
+u8 u8_rc_g_duty_speed;                             /* 前進/後進 速度入力 */
+u8 u8_rc_g_duty_shift_mode;                        /* シフトチェンジモード入力 (セミオートマ/オート) */
+u8 u8_rc_g_duty_speed_gain;                        /* 加速度合い(エンジン応答)入力 */
+u8 u8_rc_g_duty_shift_updown;                      /* シフトアップダウン入力 */
+u8 u8_rc_g_duty_rev_limit;                         /* レブリミット閾値入力 */
 
 static u8 u8_rc_s_duty_judge_timeout_flag;         /* パルス幅取得 タイムアウト */
 static u8 u8_rc_s_duty_judge_timeout_cnt;          /* パルス幅取得 失敗カウント */
 
 
+/* SFRからの読み止しだけは、メモリからの毎回呼び出しを指定する */
 typedef struct rc_duty_get_status
-{
-    u8 *ioc_port_reg_addr;              /* IOCポートレジスタへのポインタ */
-    u8 *ioc_flag_reg_addr;              /* IOCフラグレジスタへのポインタ(アドレス指定しておく) */
-    u8 u8_judge_complete_flag;          /* 指定のチャネルのduty測定完了フラグ */
-    u8 u8_ch_duty_val;                  /* 取得したdutyのパルス幅値 ( タイマレジスタからの取得値 ) */
+{   /* レジスタ設定 */
+    volatile u8 *port_addr;              /* IOCポートレジスタへのポインタ */
+    u8 port_bitmask;            /* IOCポートレジスタのビット指定 */
+    volatile u8 *flag_addr;              /* IOCフラグレジスタへのポインタ(アドレス指定しておく) */
+    u8 flag_bitmask;            /* IOCフラグレジスタのビット指定 */
+    
+    /* ソフトウェア処理用 */
+    u8 u8_judge_complete_flag;  /* 指定のチャネルのduty測定完了フラグ */
+    u8 u8_ch_duty_val;          /* 取得したdutyのパルス幅値 ( タイマレジスタからの取得値 ) */
 }rc_duty_status;
 
 
-/* メモリからの毎回呼び出しを指定する */
-/* 本当はアドレスだけはconstにしておきたいが？　対応要検討 */
-volatile static rc_duty_status rc_duty_status_tbl[ RC_INT_IOC_FLAG_NUM ] =
-{ /* IOCポートレジスタのアドレス,     IOCフラグレジスタのアドレス,    確認完了フラグ,     タイマレジスタ保持値  */
-    { &GPIO_IN_RC_CH_SPEED,                &RC_INT_IOC_FLAG_SPEED,            CLEAR,        (u8)0},
-    { &GPIO_IN_RC_CH_SHIFT_MODE,           &RC_INT_IOC_FLAG_SHIFT_MODE,       CLEAR,        (u8)0},
-    { &GPIO_IN_RC_CH_SPEED_GAIN,           &RC_INT_IOC_FLAG_SPEED_GAIN,       CLEAR,        (u8)0},
-    { &GPIO_IN_RC_CH_SHIFT_UPDOWN,         &RC_INT_IOC_FLAG_SHIFT_UPDOWN,     CLEAR,        (u8)0},
-    { &GPIO_IN_RC_CH_SHIFT_REV_LIMIT,      &RC_INT_IOC_FLAG_SHIFT_REV_LIMIT,  CLEAR,        (u8)0},
+/* ここで全チャネルまとめて指定できるようにしておきたい */
+static rc_duty_status rc_duty_get_register_combi_tbl[ RC_DUTY_CH_IDX_MAX ] =
+{ /* IOCポート/ビット,  IOCフラグ/ビット,   duty測定完了フラグ,   タイマレジスタ保持値  */
+    { &PORTA,    (u8)(1U << 0U),     &IOCAF,      (u8)0,      CLEAR,        (u8)0},      /* RC_DUTY_CH_IDX_0 */
+    { &PORTA,    (u8)(1U << 1U),     &IOCAF,      (u8)1,      CLEAR,        (u8)0},      /* RC_DUTY_CH_IDX_1 */
+    { &PORTA,    (u8)(1U << 2U),     &IOCAF,      (u8)2,      CLEAR,        (u8)0},      /* RC_DUTY_CH_IDX_2 */
+    { &PORTA,    (u8)(1U << 3U),     &IOCAF,      (u8)3,      CLEAR,        (u8)0},      /* RC_DUTY_CH_IDX_3 */
+    { &PORTA,    (u8)(1U << 4U),     &IOCAF,      (u8)4,      CLEAR,        (u8)0},      /* RC_DUTY_CH_IDX_4 */
 };
-/* 特定のビットめがけての1bitポインタってどうなの？ SFR読み出し時の解釈が知りたい */
 /* リードモディファイ的にどうなるか。 */
 
 
 /* 関数プロトタイプ宣言 */
 static void func_rc_s_get_duty( void );
+static void func_rc_s_ioc_flag_erase( u8 u8_ioc_ch );
+static void func_rc_s_ioc_state_read( u8 *u8_flag_buff, u8 *u8_port_buff ,u8 u8_ioc_ch );
 
 
 /* グローバル変数 */
@@ -111,6 +106,7 @@ void func_rc_g_init( void )
 /**************************************************************/
 void func_rc_g_main( void )
 {
+    /* @@割り込み関数で更新される変数を、この処理内で再更新しないこと */
     func_rc_s_get_duty();
 }
 
@@ -129,7 +125,12 @@ void func_rc_g_duty_detection( void )
     u8 u8_timer_register_by_ioc_int;
     u8 u8_duty_judge_ch_remain_flag;
     
+    u8 u8_ioc_flag_buff;
+    u8 u8_ioc_port_buff;
+    
     /* ローカル変数初期化 */
+    u8_ioc_flag_buff = (u8)0;
+    u8_ioc_port_buff = (u8)0;
     u8_loopcnt = (u8)0;
     u8_timer_register_by_ioc_int = (u8)0;
     u8_duty_judge_ch_remain_flag = CLEAR;
@@ -140,8 +141,11 @@ void func_rc_g_duty_detection( void )
         case RC_SEQ_DUTY_JUDGE_INIT:
             /* 初回のトリガ操作を待機中・・・ */
             /* パルス幅測定 基準チャネルの確認 */
-            if( ( RC_INT_IOC_FLAG_SPEED == SET ) &&
-                ( GPIO_IN_RC_CH_SPEED == LOW ) )
+            /* IOCフラグの確認 */
+            func_rc_s_ioc_state_read( &u8_ioc_flag_buff, &u8_ioc_port_buff ,RC_DUTY_CH_IDX_0 );
+            
+            if( ( u8_ioc_flag_buff == SET ) &&
+                ( u8_ioc_port_buff == ((u8)~RC_DUTY_PULSE_END_LOGIC )) )
             { /* CH0のパルス変化入力 & HI->LOWへの変化だった */
                 u8_rc_g_duty_judge_sequence = RC_SEQ_DUTY_JUDGE_START;
             }
@@ -163,18 +167,20 @@ void func_rc_g_duty_detection( void )
                 u8_rc_g_duty_judge_sequence = RC_SEQ_DUTY_JUDGE_TIMEOUT;
             }
             else
-            { /* 全チャネル パルス幅測定中 */
+            { /* 全チャネル パルス幅測定中 */ 
                 /* IOC割り込みフラグが立ってるポートを確認 */
-                for( u8_loopcnt = (u8)0; u8_loopcnt < RC_INT_IOC_FLAG_NUM ; u8_loopcnt++ )
+                for( u8_loopcnt = (u8)0; u8_loopcnt < RC_DUTY_CH_IDX_MAX ; u8_loopcnt++ )
                 {
-                    if( ( *(rc_duty_status_tbl[u8_loopcnt].ioc_port_reg_addr) == RC_DUTY_PULSE_END_LOGIC ) &&
-                        ( rc_duty_status_tbl[u8_loopcnt].u8_judge_complete_flag == CLEAR ) )
-                    { /* IOC割り込み発生時点の極性があっている & まだパルス幅測定完了前のチャネル */
-                        if( *(rc_duty_status_tbl[u8_loopcnt].ioc_flag_reg_addr) != (u8)0  )
-                        { /* IOC割り込み発生中のポートを発見 */
-                            *(rc_duty_status_tbl[u8_loopcnt].ioc_flag_reg_addr) = CLEAR;                         /* @@ビット指定で消せるのか要確認 多チャンネル対応のため。 */
-                            rc_duty_status_tbl[u8_loopcnt].u8_ch_duty_val = u8_timer_register_by_ioc_int;        /* IOC割り込み発生時点でのタイマ値を取得 */
-                            rc_duty_status_tbl[u8_loopcnt].u8_judge_complete_flag = SET;                         /* 対象のチャネルのパルス幅測定 完了 */
+                    func_rc_s_ioc_state_read( &u8_ioc_flag_buff, &u8_ioc_port_buff ,u8_loopcnt );
+                    
+                    if( ( u8_ioc_port_buff == RC_DUTY_PULSE_END_LOGIC ) &&                                       /* IOC割り込み発生時点の極性があっている */
+                        ( rc_duty_get_register_combi_tbl[u8_loopcnt].u8_judge_complete_flag == CLEAR ) )         /* まだパルス幅測定完了前のチャネル */
+                    {
+                        if( u8_ioc_flag_buff == SET )                   /* IOC割り込み発生中のポートを発見 */
+                        {
+                            func_rc_s_ioc_flag_erase( u8_loopcnt );             /* IOCフラグクリア */
+                            rc_duty_get_register_combi_tbl[u8_loopcnt].u8_ch_duty_val = u8_timer_register_by_ioc_int;        /* IOC割り込み発生時点でのタイマ値を取得 */
+                            rc_duty_get_register_combi_tbl[u8_loopcnt].u8_judge_complete_flag = SET;                         /* 対象のチャネルのパルス幅測定 完了 */
                         }
                     }
                     else
@@ -183,7 +189,7 @@ void func_rc_g_duty_detection( void )
                     }
                     
                     /* まだ割り込み未発生のチャネルがある */
-                    if( rc_duty_status_tbl[u8_loopcnt].u8_judge_complete_flag == CLEAR )
+                    if( rc_duty_get_register_combi_tbl[u8_loopcnt].u8_judge_complete_flag == CLEAR )
                     {
                         u8_duty_judge_ch_remain_flag = SET;
                     }
@@ -191,8 +197,8 @@ void func_rc_g_duty_detection( void )
                 
                 /* 全チャネル パルス幅測定 完了判定 */
                 if( u8_duty_judge_ch_remain_flag == CLEAR )
-                {
-                    u8_rc_g_duty_judge_sequence = RC_SEQ_DUTY_JUDGE_INIT;                           /* 初期状態へ戻す */
+                { /* 全チャネル検索し、1chもduty測定未完了のチャネルがなかった */
+                    u8_rc_g_duty_judge_sequence = RC_SEQ_DUTY_JUDGE_INIT;                           /* 待機状態へ戻す */
                 }
             }
             
@@ -220,12 +226,12 @@ void func_rc_g_duty_detection( void )
         case RC_SEQ_DUTY_JUDGE_FAILE:
             /* パルス幅測定失敗 */
             /* ここに来た時点で設計ミスなので、デバッグ時点ではあえて抜けるないようにしておく。 */
-            for( u8_loopcnt = (u8)0; u8_loopcnt < RC_INT_IOC_FLAG_NUM ; u8_loopcnt++ )
+            for( u8_loopcnt = (u8)0; u8_loopcnt < RC_DUTY_CH_IDX_MAX ; u8_loopcnt++ )
             {
-                *(rc_duty_status_tbl[u8_loopcnt].ioc_port_reg_addr) != (u8)0;                        /* 読み取り専用なので特に意味なし */
-                *(rc_duty_status_tbl[u8_loopcnt].ioc_flag_reg_addr) != (u8)0;                        /* 割り込みフラグはクリアしておく */
-                rc_duty_status_tbl[u8_loopcnt].u8_ch_duty_val = (u8)0;                               /* duty0%設定 */
-                rc_duty_status_tbl[u8_loopcnt].u8_judge_complete_flag = SET;                         /* duty取得完了フラグ クリア */
+                *(rc_duty_get_register_combi_tbl[u8_loopcnt].port_addr) != (u8)0;                        /* 読み取り専用なので特に意味なし */
+                *(rc_duty_get_register_combi_tbl[u8_loopcnt].flag_addr) != (u8)0;                        /* 割り込みフラグはクリアしておく */
+                rc_duty_get_register_combi_tbl[u8_loopcnt].u8_judge_complete_flag = SET;                 /* duty取得完了フラグ クリア */
+                rc_duty_get_register_combi_tbl[u8_loopcnt].u8_ch_duty_val = (u8)0;                       /* duty0%設定 */
             }
             
             u8_rc_s_duty_judge_timeout_cnt = (u8)0;
@@ -238,6 +244,54 @@ void func_rc_g_duty_detection( void )
 }
 
 
+/**************************************************************/
+/*  Function:                                                 */
+/* *u8_flagbuff：引数/変数 IOCフラグ状態                          */
+/* *u8_portbuff：引数/変数 IOC割り当てのポート状態                */
+/* u8_ioc_ch：引数 IOCのチャネル指定                             */
+/**************************************************************/
+static void func_rc_s_ioc_state_read( u8 *u8_flag_buff, u8 *u8_port_buff ,u8 u8_ioc_ch )
+{
+    *u8_flag_buff = *(rc_duty_get_register_combi_tbl[ u8_ioc_ch ].flag_addr);                             /* IOCフラグレジスタの値を取得 */
+    *u8_flag_buff = *u8_flag_buff & (rc_duty_get_register_combi_tbl[ u8_ioc_ch ].flag_bitmask);        /* ビットマスク */
+    
+    if( *u8_flag_buff != (u8)0 )
+    { /* IOCフラグレジスタの該当ビットが0ではない */
+        *u8_flag_buff = SET;         /* のちの処理でビット位置気にしないよう、この時点で上書きする */
+    }
+    else
+    {
+        *u8_flag_buff = CLEAR;
+    }
+    
+    /* IOCポートの確認 */
+    *u8_port_buff = *(rc_duty_get_register_combi_tbl[ u8_ioc_ch ].port_addr);                       /* IOCに該当のポート状態を取得 */
+    
+    if( *u8_port_buff != (u8)0 )
+    {
+        *u8_port_buff = SET;
+    }
+    else
+    {
+        *u8_port_buff = CLEAR;
+    }
+}
+
+/**************************************************************/
+/*  Function:                                                 */
+/* IOC割り込みの特定のビットをクリアする                          */
+/**************************************************************/
+static void func_rc_s_ioc_flag_erase( u8 u8_ioc_ch )
+{
+    u8 u8_ioc_flag_buff;
+    
+    u8_ioc_flag_buff = rc_duty_get_register_combi_tbl[ u8_ioc_ch ].flag_bitmask;
+    u8_ioc_flag_buff = (u8)~u8_ioc_flag_buff;       /* ビット反転 */
+    
+    rc_duty_get_register_combi_tbl[ u8_ioc_ch ].flag_bitmask &= u8_ioc_flag_buff;
+}
+
+
 
 /**************************************************************/
 /*  Function:                                                 */
@@ -246,13 +300,17 @@ void func_rc_g_duty_detection( void )
 /**************************************************************/
 static void func_rc_s_get_duty( void )
 {
-    /* 値の取得時も割り込み禁止にはしない */
-    /* グローバル変数へ移植 */   
-    u8_rc_g_duty_speed          = rc_duty_status_tbl [RC_DUTY_IDX_SPEED ].u8_ch_duty_val;
-    u8_rc_g_duty_shift_mode     = rc_duty_status_tbl [RC_DUTY_IDX_SHIFT_MODE ].u8_ch_duty_val;
-    u8_rc_g_duty_speed_gain     = rc_duty_status_tbl [RC_DUTY_IDX_SPEED_GAIN ].u8_ch_duty_val;
-    u8_rc_g_duty_shift_updown   = rc_duty_status_tbl [RC_DUTY_IDX_SHIFT_UPDOWN ].u8_ch_duty_val;
-    u8_rc_g_duty_rev_limit      = rc_duty_status_tbl [RC_DUTY_IDX_SHIFT_REV_LIMIT ].u8_ch_duty_val;
+    /* グローバル変数へ移植 */
+    /* 割り込み更新がないタイミングでデータを取り出す */
+    if( u8_rc_g_duty_judge_sequence == RC_SEQ_DUTY_JUDGE_INIT )
+    { /* 次のパルス開始タイミングまで待機中 (duty更新なし中) */
+        u8_rc_g_duty_speed          = rc_duty_get_register_combi_tbl [ RC_DUTY_CH_IDX_0 ].u8_ch_duty_val;
+        u8_rc_g_duty_shift_mode     = rc_duty_get_register_combi_tbl [ RC_DUTY_CH_IDX_1 ].u8_ch_duty_val;
+        u8_rc_g_duty_speed_gain     = rc_duty_get_register_combi_tbl [ RC_DUTY_CH_IDX_2 ].u8_ch_duty_val;
+        u8_rc_g_duty_shift_updown   = rc_duty_get_register_combi_tbl [ RC_DUTY_CH_IDX_3 ].u8_ch_duty_val;
+        u8_rc_g_duty_rev_limit      = rc_duty_get_register_combi_tbl [ RC_DUTY_CH_IDX_4 ].u8_ch_duty_val;
+    }
+    
 }
 
 

@@ -71,7 +71,6 @@ void  func_main_s_main_loop_judge( void )
     /* このマイコン主な制御はサーボモータの角度切り替え */
     /* ラジコン用プロポの角度指令が50Hz程度の入力なので、それより早い1ms(100Hz)の更新周期をもっていれば十分 */
     /* 最大の応答速度を出してると言える */
-
     u8_main_s_1ms_task_cnt++;
 
     if( u8_main_s_1ms_task_cnt > MAIN_TASK_DIVIDER )

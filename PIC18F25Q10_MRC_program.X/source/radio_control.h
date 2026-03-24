@@ -19,8 +19,13 @@ extern "C" {
 #define RC_SEQ_DUTY_JUDGE_TIMEOUT        ((u8)3)        /* duty測定 タイムアウト判定 */
 #define RC_SEQ_DUTY_JUDGE_FAILE          ((u8)4)        /* duty測定 失敗判定 */
 
-u8 u8_rc_g_duty_judge_sequence;
+extern u8 u8_rc_g_duty_judge_sequence;
 
+extern u8 u8_rc_g_duty_speed;
+extern u8 u8_rc_g_duty_shift_mode;
+extern u8 u8_rc_g_duty_speed_gain;
+extern u8 u8_rc_g_duty_shift_updown;
+extern u8 u8_rc_g_duty_rev_limit;
 
 extern void func_rc_g_main( void );
 extern void func_rc_g_init( void );

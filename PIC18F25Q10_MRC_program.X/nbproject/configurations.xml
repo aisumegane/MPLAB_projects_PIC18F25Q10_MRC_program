@@ -30,6 +30,7 @@
           <itemPath>source/mcufunc/timer_driver.c</itemPath>
           <itemPath>source/mcufunc/timer_driver.h</itemPath>
           <itemPath>source/mcufunc/config_bits.h</itemPath>
+          <itemPath>source/mcufunc/pic18f25q10.h</itemPath>
         </logicalFolder>
         <logicalFolder name="tools" displayName="tools" projectFiles="true">
           <itemPath>source/tools/servo.c</itemPath>

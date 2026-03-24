@@ -12,6 +12,8 @@
 extern "C" {
 #endif
 
+#include "./mcufunc/pic18f25q10.h"
+
 /* 共通マクロ設定 */
 #define     CLEAR   0U
 #define     OFF     0U

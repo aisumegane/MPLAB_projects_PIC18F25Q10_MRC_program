@@ -6,7 +6,6 @@
  */
 
 #include <xc.h>
-#include "pic18F25Q10.h"
 #include "../userdefine.h"
 
 #include "gpio.h"

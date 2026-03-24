@@ -11,6 +11,7 @@
 
 
 #include "./mcufunc/gpio.h"
+#include "./mcufunc/mcu_setup.h"
 #include "./radio_control.h"
 
 
@@ -33,11 +34,11 @@
 
 u8 u8_rc_g_duty_judge_sequence;                    /* パルス幅測定シーケンス */
 
-u8 u8_rc_g_duty_speed;                             /* 前進/後進 速度入力 */
-u8 u8_rc_g_duty_shift_mode;                        /* シフトチェンジモード入力 (セミオートマ/オート) */
-u8 u8_rc_g_duty_speed_gain;                        /* 加速度合い(エンジン応答)入力 */
-u8 u8_rc_g_duty_shift_updown;                      /* シフトアップダウン入力 */
-u8 u8_rc_g_duty_rev_limit;                         /* レブリミット閾値入力 */
+u16 u16_rc_g_duty_speed;                             /* 前進/後進 速度入力 */
+u16 u16_rc_g_duty_shift_mode;                        /* シフトチェンジモード入力 (セミオートマ/オート) */
+u16 u16_rc_g_duty_speed_gain;                        /* 加速度合い(エンジン応答)入力 */
+u16 u16_rc_g_duty_shift_updown;                      /* シフトアップダウン入力 */
+u16 u16_rc_g_duty_rev_limit;                         /* レブリミット閾値入力 */
 
 static u8 u8_rc_s_duty_judge_timeout_flag;         /* パルス幅取得 タイムアウト */
 static u8 u8_rc_s_duty_judge_timeout_cnt;          /* パルス幅取得 失敗カウント */
@@ -53,18 +54,18 @@ typedef struct rc_duty_get_status
     
     /* ソフトウェア処理用 */
     u8 u8_judge_complete_flag;  /* 指定のチャネルのduty測定完了フラグ */
-    u8 u8_ch_duty_val;          /* 取得したdutyのパルス幅値 ( タイマレジスタからの取得値 ) */
+    u16 u16_ch_duty_cnt;        /* 取得したdutyのパルス幅値 ( タイマレジスタからの取得値 ) */
 }rc_duty_status;
 
 
 /* ここで全チャネルまとめて指定できるようにしておきたい */
 static rc_duty_status rc_duty_get_register_combi_tbl[ RC_DUTY_CH_IDX_MAX ] =
 { /* IOCポート/ビット,  IOCフラグ/ビット,   duty測定完了フラグ,   タイマレジスタ保持値  */
-    { &PORTA,    (u8)(1U << 0U),     &IOCAF,      (u8)0,      CLEAR,        (u8)0},      /* RC_DUTY_CH_IDX_0 */
-    { &PORTA,    (u8)(1U << 1U),     &IOCAF,      (u8)1,      CLEAR,        (u8)0},      /* RC_DUTY_CH_IDX_1 */
-    { &PORTA,    (u8)(1U << 2U),     &IOCAF,      (u8)2,      CLEAR,        (u8)0},      /* RC_DUTY_CH_IDX_2 */
-    { &PORTA,    (u8)(1U << 3U),     &IOCAF,      (u8)3,      CLEAR,        (u8)0},      /* RC_DUTY_CH_IDX_3 */
-    { &PORTA,    (u8)(1U << 4U),     &IOCAF,      (u8)4,      CLEAR,        (u8)0},      /* RC_DUTY_CH_IDX_4 */
+    { &PORTA,    (u8)(1U << 0U),     &IOCAF,      (u8)0,      CLEAR,        (u16)0},      /* RC_DUTY_CH_IDX_0 */
+    { &PORTA,    (u8)(1U << 1U),     &IOCAF,      (u8)1,      CLEAR,        (u16)0},      /* RC_DUTY_CH_IDX_1 */
+    { &PORTA,    (u8)(1U << 2U),     &IOCAF,      (u8)2,      CLEAR,        (u16)0},      /* RC_DUTY_CH_IDX_2 */
+    { &PORTA,    (u8)(1U << 3U),     &IOCAF,      (u8)3,      CLEAR,        (u16)0},      /* RC_DUTY_CH_IDX_3 */
+    { &PORTA,    (u8)(1U << 4U),     &IOCAF,      (u8)4,      CLEAR,        (u16)0},      /* RC_DUTY_CH_IDX_4 */
 };
 /* リードモディファイ的にどうなるか。 */
 
@@ -89,11 +90,11 @@ void func_rc_g_init( void )
     u8_rc_s_duty_judge_timeout_cnt = (u8)0;
     u8_rc_g_duty_judge_sequence = RC_SEQ_DUTY_JUDGE_INIT;
     
-    u8_rc_g_duty_speed          = (u8)0;
-    u8_rc_g_duty_shift_mode     = (u8)0;
-    u8_rc_g_duty_speed_gain     = (u8)0;
-    u8_rc_g_duty_shift_updown   = (u8)0;
-    u8_rc_g_duty_rev_limit      = (u8)0;
+    u16_rc_g_duty_speed          = (u16)0;
+    u16_rc_g_duty_shift_mode     = (u16)0;
+    u16_rc_g_duty_speed_gain     = (u16)0;
+    u16_rc_g_duty_shift_updown   = (u16)0;
+    u16_rc_g_duty_rev_limit      = (u16)0;
 }
 
 
@@ -122,7 +123,7 @@ void func_rc_g_main( void )
 void func_rc_g_duty_detection( void )
 {   
     u8 u8_loopcnt;
-    u8 u8_timer_register_by_ioc_int;
+    u16 u16_timer_register_buff;
     u8 u8_duty_judge_ch_remain_flag;
     
     u8 u8_ioc_flag_buff;
@@ -132,7 +133,7 @@ void func_rc_g_duty_detection( void )
     u8_ioc_flag_buff = (u8)0;
     u8_ioc_port_buff = (u8)0;
     u8_loopcnt = (u8)0;
-    u8_timer_register_by_ioc_int = (u8)0;
+    u16_timer_register_buff = (u16)0;
     u8_duty_judge_ch_remain_flag = CLEAR;
     
     
@@ -150,15 +151,13 @@ void func_rc_g_duty_detection( void )
                 u8_rc_g_duty_judge_sequence = RC_SEQ_DUTY_JUDGE_START;
             }
             
-            /* タイマスタート */
-            /* タイマレジスタクリア */
-            /* @@後で追加 */
-            
+            func_mset_g_timer5_clear();             /* タイマ レジスタクリア */
+            func_mset_g_timer5_onoff( ON );         /* タイマ カウントスタート */            
             break;
             
         case RC_SEQ_DUTY_JUDGE_START:
-            IOCIE = CLEAR;                                  /* IOC割り込み禁止：この時点で同時に発生してないフラグは次に回す */
-            u8_timer_register_by_ioc_int = TMR5;            /* 割り込みが来た時点でいったんタイマレジスタの値を保持しておく */
+            IOCIE = CLEAR;                                              /* IOC割り込み禁止：この時点で同時に発生してないフラグは次に回す */
+            u16_timer_register_buff = func_mset_g_timer5_read();          /* 割り込みが来た時点でいったんタイマレジスタの値を保持しておく */
             
             
             /* 順番にチャネル判定 */
@@ -179,7 +178,7 @@ void func_rc_g_duty_detection( void )
                         if( u8_ioc_flag_buff == SET )                   /* IOC割り込み発生中のポートを発見 */
                         {
                             func_rc_s_ioc_flag_erase( u8_loopcnt );             /* IOCフラグクリア */
-                            rc_duty_get_register_combi_tbl[u8_loopcnt].u8_ch_duty_val = u8_timer_register_by_ioc_int;        /* IOC割り込み発生時点でのタイマ値を取得 */
+                            rc_duty_get_register_combi_tbl[u8_loopcnt].u16_ch_duty_cnt = u16_timer_register_buff;        /* IOC割り込み発生時点でのタイマ値を取得 */
                             rc_duty_get_register_combi_tbl[u8_loopcnt].u8_judge_complete_flag = SET;                         /* 対象のチャネルのパルス幅測定 完了 */
                         }
                     }
@@ -199,6 +198,8 @@ void func_rc_g_duty_detection( void )
                 if( u8_duty_judge_ch_remain_flag == CLEAR )
                 { /* 全チャネル検索し、1chもduty測定未完了のチャネルがなかった */
                     u8_rc_g_duty_judge_sequence = RC_SEQ_DUTY_JUDGE_INIT;                           /* 待機状態へ戻す */
+                    func_mset_g_timer5_clear();             /* タイマ レジスタクリア */
+                    func_mset_g_timer5_onoff( OFF );         /* タイマ カウントストップ */
                 }
             }
             
@@ -228,13 +229,17 @@ void func_rc_g_duty_detection( void )
             /* ここに来た時点で設計ミスなので、デバッグ時点ではあえて抜けるないようにしておく。 */
             for( u8_loopcnt = (u8)0; u8_loopcnt < RC_DUTY_CH_IDX_MAX ; u8_loopcnt++ )
             {
-                *(rc_duty_get_register_combi_tbl[u8_loopcnt].port_addr) != (u8)0;                        /* 読み取り専用なので特に意味なし */
-                *(rc_duty_get_register_combi_tbl[u8_loopcnt].flag_addr) != (u8)0;                        /* 割り込みフラグはクリアしておく */
+                // *(rc_duty_get_register_combi_tbl[u8_loopcnt].port_addr) != (u8)0;                     /* 読み取り専用なので特に意味なし */
+                func_rc_s_ioc_flag_erase( u8_loopcnt );                                                  /* IOCフラグクリア */
                 rc_duty_get_register_combi_tbl[u8_loopcnt].u8_judge_complete_flag = SET;                 /* duty取得完了フラグ クリア */
-                rc_duty_get_register_combi_tbl[u8_loopcnt].u8_ch_duty_val = (u8)0;                       /* duty0%設定 */
+                rc_duty_get_register_combi_tbl[u8_loopcnt].u16_ch_duty_cnt = (u8)0;                      /* duty0%設定 */
             }
-            
+              
             u8_rc_s_duty_judge_timeout_cnt = (u8)0;
+            
+            /* @@何度もここに来るので、ここに関数記述するのは微妙かもしれない。実害ないのでいったん保留。 */
+            func_mset_g_timer5_clear();             /* タイマ レジスタクリア */
+            func_mset_g_timer5_onoff( OFF );         /* タイマ カウントスタート */            
         
             break;
         
@@ -304,11 +309,11 @@ static void func_rc_s_get_duty( void )
     /* 割り込み更新がないタイミングでデータを取り出す */
     if( u8_rc_g_duty_judge_sequence == RC_SEQ_DUTY_JUDGE_INIT )
     { /* 次のパルス開始タイミングまで待機中 (duty更新なし中) */
-        u8_rc_g_duty_speed          = rc_duty_get_register_combi_tbl [ RC_DUTY_CH_IDX_0 ].u8_ch_duty_val;
-        u8_rc_g_duty_shift_mode     = rc_duty_get_register_combi_tbl [ RC_DUTY_CH_IDX_1 ].u8_ch_duty_val;
-        u8_rc_g_duty_speed_gain     = rc_duty_get_register_combi_tbl [ RC_DUTY_CH_IDX_2 ].u8_ch_duty_val;
-        u8_rc_g_duty_shift_updown   = rc_duty_get_register_combi_tbl [ RC_DUTY_CH_IDX_3 ].u8_ch_duty_val;
-        u8_rc_g_duty_rev_limit      = rc_duty_get_register_combi_tbl [ RC_DUTY_CH_IDX_4 ].u8_ch_duty_val;
+        u16_rc_g_duty_speed          = rc_duty_get_register_combi_tbl [ RC_DUTY_CH_IDX_0 ].u16_ch_duty_cnt;
+        u16_rc_g_duty_shift_mode     = rc_duty_get_register_combi_tbl [ RC_DUTY_CH_IDX_1 ].u16_ch_duty_cnt;
+        u16_rc_g_duty_speed_gain     = rc_duty_get_register_combi_tbl [ RC_DUTY_CH_IDX_2 ].u16_ch_duty_cnt;
+        u16_rc_g_duty_shift_updown   = rc_duty_get_register_combi_tbl [ RC_DUTY_CH_IDX_3 ].u16_ch_duty_cnt;
+        u16_rc_g_duty_rev_limit      = rc_duty_get_register_combi_tbl [ RC_DUTY_CH_IDX_4 ].u16_ch_duty_cnt;
     }
     
 }

@@ -123,10 +123,10 @@ static void func_main_s_init( void )
     u8_main_s_loop_go = CLEAR;                  /* 初期化 */
     u8_main_s_1ms_task_cnt = (u8)0;            /* 初期化 */
     
-    /* ファイルの並び順に整列 */
     func_adc_g_init();
     func_int_g_init();
     func_gpio_g_init();
+    func_rc_g_init();
     
     func_segment_g_init();
     func_servo_g_init();

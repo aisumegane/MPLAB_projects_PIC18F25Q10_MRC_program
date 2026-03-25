@@ -1,5 +1,5 @@
 /*
- * File:   main.c
+ * File:   shift.c
  * Author: ICE_MEGANE
  *
  * Created on 2020/03/5, 22:26
@@ -23,6 +23,7 @@
 /* シフトチェンジの制御を担当 */
 
 /* 関数プロトタイプ宣言 */
+static void func_shift_s_shift_mode_decide( void );
 static void func_shift_s_shift_degree_calc( void );
 static void func_shift_s_shift_change( void );
 
@@ -44,6 +45,7 @@ static u8 u8_shift_s_shift_chk_cnt;
 /**************************************************************/
 void func_shift_g_main( void )
 {
+    func_shift_s_shift_mode_decide();           /* 変則モード確定処理 */
     func_shift_s_shift_degree_calc();           /* サーボの角度計算処理 */
     func_shift_s_shift_change();                /* シフトチェンジ処理 */
 }
@@ -175,3 +177,8 @@ static void func_shift_s_shift_change( void )
     }
 }
 
+
+static void func_shift_s_shift_mode_decide( void )
+{
+    
+}

@@ -31,6 +31,11 @@
 #define RC_DUTY_PULSE_END_LOGIC           HI       /* パルスON区間終了時のポート状態  ※LPF回路あるのでLOW-Active */
 #define RC_DUTY_JUDGE_TIMEOUT_CNT         ((u8)5)
 
+#define RC_DUTY_CONVERSION_ROUND          ((u16)200)     /* dutyの端点丸め数値 */
+#define RC_DUTY_0P_CNT                    ((u16)8000)    /* duty100%相当のカウント値 */
+#define RC_DUTY_100P_CNT                  ((u16)40000)   /* duty0%相当のカウント値　 */
+
+
 
 u8 u8_rc_g_duty_judge_sequence;                    /* パルス幅測定シーケンス */
 
@@ -42,6 +47,13 @@ u16 u16_rc_g_duty_rev_limit;                         /* レブリミット閾値
 
 static u8 u8_rc_s_duty_judge_timeout_flag;         /* パルス幅取得 タイムアウト */
 static u8 u8_rc_s_duty_judge_timeout_cnt;          /* パルス幅取得 失敗カウント */
+static u8 u8_rc_s_duty_get_complete;                 /* 1msタスクでのduty取得完了フラグ */
+
+
+u8 u8_rc_g_ch_duty_tbl[ RC_DUTY_CH_IDX_MAX ] =
+{
+    (u8)0,(u8)0,(u8)0,(u8)0,(u8)0
+};
 
 
 /* SFRからの読み止しだけは、メモリからの毎回呼び出しを指定する */
@@ -71,7 +83,7 @@ static rc_duty_status rc_duty_get_register_combi_tbl[ RC_DUTY_CH_IDX_MAX ] =
 
 
 /* 関数プロトタイプ宣言 */
-static void func_rc_s_get_duty( void );
+static void func_rc_s_convert_tmrcount_to_duty( void );
 static void func_rc_s_ioc_flag_erase( u8 u8_ioc_ch );
 static void func_rc_s_ioc_state_read( u8 *u8_flag_buff, u8 *u8_port_buff ,u8 u8_ioc_ch );
 
@@ -95,6 +107,8 @@ void func_rc_g_init( void )
     u16_rc_g_duty_speed_gain     = (u16)0;
     u16_rc_g_duty_shift_updown   = (u16)0;
     u16_rc_g_duty_rev_limit      = (u16)0;
+    
+    u8_rc_s_duty_get_complete = CLEAR;
 }
 
 
@@ -108,7 +122,7 @@ void func_rc_g_init( void )
 void func_rc_g_main( void )
 {
     /* @@割り込み関数で更新される変数を、この処理内で再更新しないこと */
-    func_rc_s_get_duty();
+    func_rc_s_convert_tmrcount_to_duty();       /* タイマカウントからdutyへの変換 */
 }
 
 
@@ -301,21 +315,66 @@ static void func_rc_s_ioc_flag_erase( u8 u8_ioc_ch )
 /**************************************************************/
 /*  Function:                                                 */
 /*  入力パルス幅の一時保存値を回収                              */
-/*  1msタスク側で回収する値                                     */
+/*  タイマの計算値を0~100の1byte内のdutyへ変換する              */
+/*  インバータ電圧、角度ともに100段程度分解能があれば困らないはず  */
+/*  @@除算が激重でこの処理が一番処理負荷高いので、処理時間問題ないかチェックする */
 /**************************************************************/
-static void func_rc_s_get_duty( void )
+static void func_rc_s_convert_tmrcount_to_duty( void )
 {
+    u8 u8_loopcnt;
+    u16 u16_tmr_cnt_buff;
+    u16 u16_calc_buff;
+    u32 u32_calc_buff;
+    
+    /* ローカル変数初期化 */
+    u8_loopcnt = (u8)0;
+    u16_tmr_cnt_buff = (u16)0;
+    u16_calc_buff = (u16)0;
+    
     /* グローバル変数へ移植 */
     /* 割り込み更新がないタイミングでデータを取り出す */
-    if( u8_rc_g_duty_judge_sequence == RC_SEQ_DUTY_JUDGE_INIT )
+    if( ( u8_rc_s_duty_get_complete == CLEAR ) &&
+        ( u8_rc_g_duty_judge_sequence == RC_SEQ_DUTY_JUDGE_INIT ) )         /* 一度1msに移した方が良き？ */
     { /* 次のパルス開始タイミングまで待機中 (duty更新なし中) */
-        u16_rc_g_duty_speed          = rc_duty_get_register_combi_tbl [ RC_DUTY_CH_IDX_0 ].u16_ch_duty_cnt;
-        u16_rc_g_duty_shift_mode     = rc_duty_get_register_combi_tbl [ RC_DUTY_CH_IDX_1 ].u16_ch_duty_cnt;
-        u16_rc_g_duty_speed_gain     = rc_duty_get_register_combi_tbl [ RC_DUTY_CH_IDX_2 ].u16_ch_duty_cnt;
-        u16_rc_g_duty_shift_updown   = rc_duty_get_register_combi_tbl [ RC_DUTY_CH_IDX_3 ].u16_ch_duty_cnt;
-        u16_rc_g_duty_rev_limit      = rc_duty_get_register_combi_tbl [ RC_DUTY_CH_IDX_4 ].u16_ch_duty_cnt;
+        for( u8_loopcnt = (u8)0; u8_loopcnt < RC_DUTY_CH_IDX_MAX; u8_loopcnt++ )
+        {
+            u16_tmr_cnt_buff = rc_duty_get_register_combi_tbl[ u8_loopcnt ].u16_ch_duty_cnt;
+            
+            /* 上限加減のカット */
+            if( u16_tmr_cnt_buff < RC_DUTY_100P_CNT )
+            {
+                u16_calc_buff = RC_DUTY_100P_CNT - u16_tmr_cnt_buff;
+                if( u16_calc_buff < RC_DUTY_CONVERSION_ROUND )
+                { /* ほぼ100%寄りに張り付いている */
+                    u16_tmr_cnt_buff = RC_DUTY_100P_CNT;
+                }
+            }
+            else
+            {
+                u16_tmr_cnt_buff = RC_DUTY_100P_CNT;
+            }
+            
+            if( u16_tmr_cnt_buff > RC_DUTY_0P_CNT )
+            {
+                u16_calc_buff = u16_tmr_cnt_buff - RC_DUTY_0P_CNT;
+                if( u16_calc_buff < RC_DUTY_CONVERSION_ROUND )
+                { /*  */
+                    u16_tmr_cnt_buff = RC_DUTY_0P_CNT;
+                }
+            }
+            else
+            {
+                u16_tmr_cnt_buff = RC_DUTY_0P_CNT;
+            }
+            
+            /* タイマ値 -> %変換 */
+            u32_calc_buff = func_ud_g_calcmul_2x2_byte( u16_tmr_cnt_buff, (u16)RC_CH_DUTY_100P );
+            u32_calc_buff = func_ud_g_calcdiv_4x4_byte( u32_calc_buff, RC_DUTY_100P_CNT );
+            u8_rc_g_ch_duty_tbl[ u8_loopcnt ] = (u8)u32_calc_buff;
+        }
+        
+        u8_rc_s_duty_get_complete = SET;
     }
-    
 }
 
 

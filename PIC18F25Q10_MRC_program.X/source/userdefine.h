@@ -35,6 +35,10 @@ typedef  unsigned long   u32;
 #define     U32_MAX     ((u8)0xFFFFFFFF)
 
 
+/* 全ファイル共通関数 */
+extern u32 func_ud_g_calcmul_2x2_byte( u16 u16_arg1, u16 u16_arg2 );
+extern u32 func_ud_g_calcdiv_4x4_byte( u32 u32_arg1, u16 u32_arg2 );
+
 #ifdef	__cplusplus
 }
 #endif

@@ -103,13 +103,19 @@ static void func_main_s_loop( void )
 
 
     /* 関数コール */
+    /* 入力処理 */
     func_adc_g_main();          /* AD変換処理　 */
     func_int_g_main();          /* 割り込み処理 */
     func_gpio_g_main();         /* GPIOポート更新処理 */
     func_rc_g_main();           /* ラジコンプロポ duty取得処理 */
 
+    /* 計算処理 */
+    
     func_shift_g_main();        /* シフトチェンジ処理 */
     func_indicate_g_main();     /* 表示処理 */
+    
+    
+    /* 出力処理 */
 }
 
 

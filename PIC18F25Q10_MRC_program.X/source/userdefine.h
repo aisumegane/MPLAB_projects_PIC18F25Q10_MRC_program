@@ -23,6 +23,8 @@ extern "C" {
 #define     ON      1U
 #define     HI      1U
 
+#define     MID     3U
+
 /* 共通型名称 */
 typedef  unsigned char   u8;
 typedef  unsigned short  u16;

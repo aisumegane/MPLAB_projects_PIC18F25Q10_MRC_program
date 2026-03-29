@@ -28,17 +28,21 @@ extern "C" {
 
 
 
-typedef struct gpio_in
+typedef struct gpio_in_define
 {
     u8 u8_judge_cnt;
     u8 u8_buff;
     u8 u8_state;
-}ts_gpio_in_def;
+    u8 u8_state_bf;
+}gpio_in;
 
 
 extern void func_gpio_g_main( void );
 extern void func_gpio_g_init( void );
 
+
+extern gpio_in gpio_g_paddle_shift_sw;
+extern gpio_in gpio_g_shift_mode_sw;
 
 
 extern u8 U8_GPIO_G_OUT_NEUTRAL;

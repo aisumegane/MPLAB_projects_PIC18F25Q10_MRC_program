@@ -19,6 +19,19 @@ extern "C" {
 #define RC_SEQ_DUTY_SAMPLING_FAILE       ((u8)3)        /* duty測定 失敗判定 */
 
 
+/* 割り込み定義 */
+/* ※割り込み処理側をあまりごちゃごちゃにしたくないので、関連する関数ごとにファイル分けしとく※ */
+/* ！あとで定義位置要件等！ */
+/* 配列要素指定用 */
+#define RC_DUTY_CH_THROTTLE               ((u8)0)
+#define RC_DUTY_CH_SHIFT_MODE             ((u8)1)
+#define RC_DUTY_CH_RESPONSE               ((u8)2)
+#define RC_DUTY_CH_PADDLE_SHIFT_INPUT     ((u8)3)
+#define RC_DUTY_CH_REV_LIMIT              ((u8)4)
+#define RC_DUTY_CH_IDX_MAX                ((u8)RC_DUTY_CH_REV_LIMIT+(u8)1)
+
+
+
 /* duty定義 */
 #define RC_CH_DUTY_0P                   ((u8)0)
 #define RC_CH_DUTY_1P                   ((u8)1)
@@ -134,11 +147,7 @@ extern "C" {
 
 extern u8 u8_rc_g_duty_judge_sequence;
 
-extern u8 u8_rc_g_duty_speed;
-extern u8 u8_rc_g_duty_shift_mode;
-extern u8 u8_rc_g_duty_speed_gain;
-extern u8 u8_rc_g_duty_shift_updown;
-extern u8 u8_rc_g_duty_rev_limit;
+extern u8 u8_rc_g_ch_duty_tbl[ RC_DUTY_CH_IDX_MAX ];
 
 extern void func_rc_g_main( void );
 extern void func_rc_g_init( void );

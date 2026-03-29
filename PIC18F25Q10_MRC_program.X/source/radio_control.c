@@ -16,29 +16,24 @@
 #include "./radio_control.h"
 
 
-/* 割り込み定義 */
-/* ※割り込み処理側をあまりごちゃごちゃにしたくないので、関連する関数ごとにファイル分けしとく※ */
-/* ！あとで定義位置要件等！ */
-/* 配列要素指定用 */
-#define RC_DUTY_CH_THROTTLE               ((u8)0)
-#define RC_DUTY_CH_SHIFT_MODE             ((u8)1)
-#define RC_DUTY_CH_RESPONSE               ((u8)2)
-#define RC_DUTY_CH_PADDLE_SHIFT_INPUT     ((u8)3)
-#define RC_DUTY_CH_REV_LIMIT              ((u8)4)
-#define RC_DUTY_CH_IDX_MAX                ((u8)RC_DUTY_CH_REV_LIMIT+(u8)1)
-
+/* ポート設定 */
+#define RC_IOC_BITPOS_CH_THROTTLE              ((u8)0)        /* 0：RC_DUTY_CH_THROTTLE           */
+#define RC_IOC_BITPOS_CH_SHIFT_MODE            ((u8)3)        /* 1：RC_DUTY_CH_SHIFT_MODE         */
+#define RC_IOC_BITPOS_CH_RESPONSE              ((u8)2)        /* 2：RC_DUTY_CH_RESPONSE           */
+#define RC_IOC_BITPOS_CH_PADDLE_SHIFT_INPUT    ((u8)1)        /* 3：RC_DUTY_CH_PADDLE_SHIFT_INPUT */
+#define RC_IOC_BITPOS_CH_REV_LIMIT             ((u8)4)        /* 4：RC_DUTY_CH_REV_LIMIT          */
 
 /* 設定関連 */
-#define RC_DUTY_PULSE_ON_LOGIC            LOW            /* 入力パルスのアクティブロジック */       /* ※IOCAF、IOCANの設定と合わせること */
-#define RC_DUTY_JUDGE_TIMEOUT_CNT         ((u8)5)
-#define RC_DUTY_CONVERSION_ROUND          ((u16)100)     /* dutyの端点丸め数値 */
-#define RC_DUTY_0P_CNT                    ((u16)2000)    /* duty0%相当のカウント現在値 */
-#define RC_DUTY_100P_CNT                  ((u16)4000)    /* duty100%相当のカウント現在値　 */
-#define RC_DUTY_100P_CNT_DIFF             ( RC_DUTY_100P_CNT - RC_DUTY_0P_CNT )     /* duty100%相当のタイマカウント差分 */
+#define RC_DUTY_PULSE_ON_LOGIC                 LOW            /* 入力パルスのアクティブロジック */       /* ※IOCAF、IOCANの設定と合わせること */
+#define RC_DUTY_JUDGE_TIMEOUT_CNT              ((u8)5)
+#define RC_DUTY_CONVERSION_ROUND               ((u16)100)     /* dutyの端点丸め数値 */
+#define RC_DUTY_0P_CNT                         ((u16)2000)    /* duty0%相当のカウント現在値 */
+#define RC_DUTY_100P_CNT                       ((u16)4000)    /* duty100%相当のカウント現在値　 */
+#define RC_DUTY_100P_CNT_DIFF                  ( RC_DUTY_100P_CNT - RC_DUTY_0P_CNT )     /* duty100%相当のタイマカウント差分 */
 
 /* duty増減方向の設定(リモコンの操作反転したい場合に使う) */
-#define RC_DUTY_PROP                       ((u8)0)       /* 比例 */
-#define RC_DUTY_REVERSE_PROP               ((u8)1)       /* 反比例 */
+#define RC_DUTY_PROP                         ((u8)0)       /* 比例 */
+#define RC_DUTY_REVERSE_PROP                 ((u8)1)       /* 反比例 */
 
 
 u8 u8_rc_s_debug_flag;
@@ -103,11 +98,11 @@ typedef struct rc_duty_sample_register_setting
 /* ここで全チャネルまとめて指定できるようにしておきたい */
 static const rc_duty_sample_setting rc_duty_get_register_combi_tbl[ RC_DUTY_CH_IDX_MAX ] =
 { /* IOCポート,  IOCポート-ビット位置,  IOCフラグ,  IOCフラグ-ビット位置,    dutyの増減方向    */
-    { &PORTA,    (u8)(1U << 0U),     &IOCAF,      (u8)(1U << 0U),      RC_DUTY_REVERSE_PROP },      /* RC_DUTY_CH_THROTTLE           */
-    { &PORTA,    (u8)(1U << 1U),     &IOCAF,      (u8)(1U << 1U),      RC_DUTY_PROP         },      /* RC_DUTY_CH_SHIFT_MODE         */
-    { &PORTA,    (u8)(1U << 2U),     &IOCAF,      (u8)(1U << 2U),      RC_DUTY_PROP         },      /* RC_DUTY_CH_RESPONSE           */
-    { &PORTA,    (u8)(1U << 3U),     &IOCAF,      (u8)(1U << 3U),      RC_DUTY_PROP         },      /* RC_DUTY_CH_PADDLE_SHIFT_INPUT */
-    { &PORTA,    (u8)(1U << 4U),     &IOCAF,      (u8)(1U << 4U),      RC_DUTY_PROP         },      /* RC_DUTY_CH_REV_LIMIT          */
+    { &PORTA,    (u8)(1U << RC_IOC_BITPOS_CH_THROTTLE),               &IOCAF,      (u8)(1U << RC_IOC_BITPOS_CH_THROTTLE),                RC_DUTY_REVERSE_PROP },      /* RC_DUTY_CH_THROTTLE           */
+    { &PORTA,    (u8)(1U << RC_IOC_BITPOS_CH_SHIFT_MODE),             &IOCAF,      (u8)(1U << RC_IOC_BITPOS_CH_SHIFT_MODE),              RC_DUTY_PROP         },      /* RC_DUTY_CH_SHIFT_MODE         */
+    { &PORTA,    (u8)(1U << RC_IOC_BITPOS_CH_RESPONSE),               &IOCAF,      (u8)(1U << RC_IOC_BITPOS_CH_RESPONSE),                RC_DUTY_PROP         },      /* RC_DUTY_CH_RESPONSE           */
+    { &PORTA,    (u8)(1U << RC_IOC_BITPOS_CH_PADDLE_SHIFT_INPUT),     &IOCAF,      (u8)(1U << RC_IOC_BITPOS_CH_PADDLE_SHIFT_INPUT),      RC_DUTY_PROP         },      /* RC_DUTY_CH_PADDLE_SHIFT_INPUT */
+    { &PORTA,    (u8)(1U << RC_IOC_BITPOS_CH_REV_LIMIT),              &IOCAF,      (u8)(1U << RC_IOC_BITPOS_CH_REV_LIMIT),               RC_DUTY_PROP         },      /* RC_DUTY_CH_REV_LIMIT          */
 };
 /*===================================================================================================================================*/
 /*===================================================================================================================================*/
@@ -158,7 +153,6 @@ void func_rc_g_main( void )
     /* @@割り込み関数で更新される変数を、この処理内で再更新しないこと */
     func_rc_s_convert_tmrcount_to_duty();       /* タイマカウントからdutyへの変換 */
     func_rc_s_debug_pulseout();                 /* パルス幅取得の動作確認処理 */
-
 }
 
 
@@ -559,7 +553,7 @@ static void func_rc_s_debug_pulseout( void )
         u8_rc_s_duty_cnt_debug++;
     }
 
-    if( u8_rc_s_duty_cnt_debug >= u8_rc_g_ch_duty_tbl[ RC_DUTY_CH_THROTTLE ] )
+    if( u8_rc_s_duty_cnt_debug >= u8_rc_g_ch_duty_tbl[ RC_DUTY_CH_PADDLE_SHIFT_INPUT ] )
     {
         u8_rc_s_duty_cnt_debug = (u8)0;
 

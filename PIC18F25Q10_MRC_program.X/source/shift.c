@@ -13,6 +13,7 @@
 #include "./mcufunc/gpio.h"
 #include "./mcufunc/adc.h"
 #include "./tools/servo.h"
+#include "radio_control.h"
 
 #define SHIFT_CHK_TIME                ((u8)500)     /* *10ms */
 
@@ -24,8 +25,11 @@
 /* 関数プロトタイプ宣言 */
 static void func_shift_s_shift_mode_decide( void );
 static void func_shift_s_shift_degree_calc( void );
-static void func_shift_s_shift_change( void );
+static void func_shift_s_shift_position_decide( void );
+static void func_shit_s_shift_position_output( void );
 
+u8 u8_shift_g_shift_mode;
+u8 u8_shift_g_shift_position;
 
 static u8 u8_shift_s_deg_newtral_idx;
 static u8 u8_shift_s_deg_upper_idx;
@@ -44,9 +48,12 @@ static u8 u8_shift_s_shift_chk_cnt;
 /**************************************************************/
 void func_shift_g_main( void )
 {
+    /* 入力判定 */
     func_shift_s_shift_mode_decide();           /* 変則モード確定処理 */
-    func_shift_s_shift_degree_calc();           /* サーボの角度計算処理 */
-    func_shift_s_shift_change();                /* シフトチェンジ処理 */
+    func_shift_s_shift_position_decide();       /* シフトチェンジ処理 */
+
+    /* 出力制御 */
+    func_shit_s_shift_position_output();        /* シフト位置出力処理 */
 }
 
 
@@ -58,6 +65,9 @@ void func_shift_g_main( void )
 /**************************************************************/
 void func_shift_g_init( void )
 {
+    u8_shift_g_shift_mode = SHIFT_MODE_MANUAL;
+    u8_shift_g_shift_position = SHIFT_POSI_0;
+
     u8_shift_s_deg_newtral_idx = (u8)0;
     u8_shift_s_deg_upper_idx   = (u8)0;
     u8_shift_s_deg_lower_idx   = (u8)0;
@@ -71,115 +81,103 @@ void func_shift_g_init( void )
 /*                                                            */
 /*                                                            */
 /**************************************************************/
-static void func_shift_s_shift_degree_calc( void )
+static void func_shift_s_shift_position_decide( void )
 {
-    u8 u8_loopidx;
-    u16 u16_adc_compare_cnt;
-    
-    /* 中立時の角度指定 */
-    /* 割り算ができないので、全範囲からどの位置に割り出すためにfor文を使う */
-    /* サーボの角度は36分割。AD値はフルスケールで最大1024なので、28を引き続けてマッチしたところを、おおよその位置指定IDXとする */
-
-
-    /* ローカル変数初期化 */
-    u8_loopidx = (u8)0;
-    u16_adc_compare_cnt = (u16)0;
-
-    while( u8_loopidx < SERVO_ANGLE_NUM )
-    {
-        if( u16_adc_compare_cnt > u16_adc_g_ad_result_ave____servo_posi_adj )
-        {
-            break;      /* 2点のうち、上側の角度idxを返すことにした */
+    if( u8_shift_g_shift_mode == SHIFT_MODE_MANUAL )
+    { /* マニュアルシフト */
+        if( ( gpio_g_paddle_shift_sw.u8_state == HI ) &&
+            ( gpio_g_paddle_shift_sw.u8_state_bf == MID ))
+        { /* シフトアップ */
+            if( u8_shift_g_shift_position < SHIFT_POSI_7 )
+            {
+                u8_shift_g_shift_position++;
+            }
+            else
+            {
+                u8_shift_g_shift_position = SHIFT_POSI_7;
+            }
         }
-
-        u16_adc_compare_cnt += (u16)28;     /* 小数点以下はずれるので、あまり精度はない */
-        u8_loopidx++;
+        else if( ( gpio_g_paddle_shift_sw.u8_state == LOW ) &&
+                 ( gpio_g_paddle_shift_sw.u8_state_bf == MID ))
+        { /* シフトダウン */
+            if( u8_shift_g_shift_position > SHIFT_POSI_1 )
+            {
+                u8_shift_g_shift_position--;
+            }
+            else
+            {
+                u8_shift_g_shift_position = SHIFT_POSI_0;
+            }
+        }
+        else
+        {
+            ;               /* 現在のシフト位置を維持 */
+        }
     }
-
-    if( u8_loopidx < SERVO_DEG_IDX__180 )
+    else if( u8_shift_g_shift_mode == SHIFT_MODE_AUTOMATIC )
     {
-        u8_shift_s_deg_newtral_idx = u8_loopidx;
+
     }
     else
     {
-        u8_shift_s_deg_newtral_idx = SERVO_DEG_IDX__180;
-    }
-    
-    
-    /* 下側時の角度指定  */
-    if( u8_shift_s_deg_newtral_idx > SERVO_POSI_LOWER_DEC )
-    {
-        u8_shift_s_deg_lower_idx = u8_shift_s_deg_newtral_idx - SERVO_POSI_LOWER_DEC;
-    }
-    else
-    { /* 下側に寄せると0度になってしまう場合は、0度に固定する */
-        u8_shift_s_deg_lower_idx = SERVO_DEG_IDX__0;
-    }
-
-    /* 上側時の角度指定  */
-    u8_shift_s_deg_upper_idx = u8_shift_s_deg_newtral_idx + SERVO_POSI_UPPER_ADD;
-    
-    if( u8_shift_s_deg_upper_idx > SERVO_DEG_IDX__180 )
-    {
-        u8_shift_s_deg_upper_idx = SERVO_DEG_IDX__180;
+        ;
     }
 }
 
 
 /**************************************************************/
 /*  Function:                                                 */
-/*  関数                                                 */
-/*                                                            */
+/*  シフト位置出力処理                                          */
 /*                                                            */
 /**************************************************************/
-static void func_shift_s_shift_change( void )
+static void func_shit_s_shift_position_output( void )
 {
-#if 0
-    /* シフトポジション指定 */
-    if( ts_gpio_g_in_neutral.u8_state == SET )
-    {
-        /* サーボ上下に固定 */
-        if( ts_gpio_g_in_shift_0.u8_state == SET )
-        {
-            servo_s_angle_set( u8_shift_s_deg_upper_idx, SERVO_SHIFT_0 );
-        }
-        else
-        {
-            servo_s_angle_set( u8_shift_s_deg_lower_idx, SERVO_SHIFT_0 );
-        }
-
-
-        if( ts_gpio_g_in_shift_1.u8_state == SET )
-        {
-            servo_s_angle_set( u8_shift_s_deg_upper_idx, SERVO_SHIFT_1 );
-        }
-        else
-        {
-            servo_s_angle_set( u8_shift_s_deg_lower_idx, SERVO_SHIFT_1 );
-        }
-
-
-        if( ts_gpio_g_in_shift_2.u8_state == SET )
-        {
-            servo_s_angle_set( u8_shift_s_deg_upper_idx, SERVO_SHIFT_2 );
-        }
-        else
-        {
-            servo_s_angle_set( u8_shift_s_deg_lower_idx, SERVO_SHIFT_2 );
-        }
+    /* 0bit目 */
+    if( ( u8_shift_g_shift_position & ((u8)0x01) ) != (u8)0 )
+    { /* 0bit目が立っている */
+        U8_GPIO_G_OUT_SHIFT_0 = SET;
     }
     else
     {
-        /* サーボ 中立 */
-        servo_s_angle_set( u8_shift_s_deg_newtral_idx, SERVO_SHIFT_0 );
-        servo_s_angle_set( u8_shift_s_deg_newtral_idx, SERVO_SHIFT_1 );
-        servo_s_angle_set( u8_shift_s_deg_newtral_idx, SERVO_SHIFT_2 );
+        U8_GPIO_G_OUT_SHIFT_0 = CLEAR;
     }
-#endif
+
+    /* 1bit目 */
+    if( ( u8_shift_g_shift_position & ((u8)0x02) ) != (u8)0 )
+    { /* 0bit目が立っている */
+        U8_GPIO_G_OUT_SHIFT_1 = SET;
+    }
+    else
+    {
+        U8_GPIO_G_OUT_SHIFT_1 = CLEAR;
+    }
+
+    /* 2bit目 */
+    if( ( u8_shift_g_shift_position & ((u8)0x04) ) != (u8)0 )
+    { /* 0bit目が立っている */
+        U8_GPIO_G_OUT_SHIFT_2 = SET;
+    }
+    else
+    {
+        U8_GPIO_G_OUT_SHIFT_2 = CLEAR;
+    }
 }
 
 
+/**************************************************************/
+/*  Function:                                                 */
+/*  変速モード確定関数                                          */
+/*                                                            */
+/**************************************************************/
 static void func_shift_s_shift_mode_decide( void )
 {
-    
+    if( gpio_g_shift_mode_sw.u8_state == HI )
+    {
+        u8_shift_g_shift_mode = SHIFT_MODE_MANUAL;
+    }
+    else
+    {
+        u8_shift_g_shift_mode = SHIFT_MODE_AUTOMATIC;
+    }
+
 }

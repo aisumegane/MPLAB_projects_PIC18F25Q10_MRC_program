@@ -19,6 +19,14 @@ extern "C" {
 #define GPIO_IN_RC_CH_SHIFT_UPDOWN          RA3
 #define GPIO_IN_RC_CH_SHIFT_REV_LIMIT       RA4
 
+/* 出力ポート割り当て定義 */
+#define GPIO_OUT_SHIFT_NEUTRAL              LATB4
+#define GPIO_OUT_SHIFT_0                    LATB1
+#define GPIO_OUT_SHIFT_1                    LATB2
+#define GPIO_OUT_SHIFT_2                    LATB3
+#define GPIO_OUT_DEBUG                      LATB0
+
+
 
 typedef struct gpio_in
 {
@@ -27,16 +35,18 @@ typedef struct gpio_in
     u8 u8_state;
 }ts_gpio_in_def;
 
+
 extern void func_gpio_g_main( void );
 extern void func_gpio_g_init( void );
 
 
-extern ts_gpio_in_def ts_gpio_g_in_shift_0;
-extern ts_gpio_in_def ts_gpio_g_in_shift_1;
-extern ts_gpio_in_def ts_gpio_g_in_shift_2;
-extern ts_gpio_in_def ts_gpio_g_in_neutral;
 
-extern u8 U8_GPIO_G_OUT_TASK_CHK;
+extern u8 U8_GPIO_G_OUT_NEUTRAL;
+extern u8 U8_GPIO_G_OUT_SHIFT_0;
+extern u8 U8_GPIO_G_OUT_SHIFT_1;
+extern u8 U8_GPIO_G_OUT_SHIFT_2;
+
+extern u8 U8_GPIO_G_OUT_DEBUG;
 
 
 

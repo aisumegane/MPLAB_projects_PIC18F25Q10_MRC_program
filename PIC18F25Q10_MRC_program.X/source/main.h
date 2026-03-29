@@ -12,7 +12,7 @@
 extern "C" {
 #endif
 
-void  func_main_s_main_loop_judge( void );      /* メインループ時間管理用割り込みタスク */
+void  func_main_g_main_loop_judge( void );      /* メインループ時間管理用割り込みタスク */
 
 #ifdef	__cplusplus
 }

@@ -18,14 +18,13 @@
 
 
 /* 出力ポート割り当て設定 (レジスタ・bit指定) */
-#define GPIO_OUT_TASK_CHK           LATB0
 
-ts_gpio_in_def ts_gpio_g_in_shift_0;
-ts_gpio_in_def ts_gpio_g_in_shift_1;
-ts_gpio_in_def ts_gpio_g_in_shift_2;
-ts_gpio_in_def ts_gpio_g_in_neutral;        /* クラッチ制御はメインマイコン側だが、各段のギヤを強制ニュートラル状態にする信号として受け取っておく */
+u8 U8_GPIO_G_OUT_NEUTRAL;        /* クラッチ制御はメインマイコン側だが、各段のギヤを強制ニュートラル状態にする信号として受け取っておく */
+u8 U8_GPIO_G_OUT_SHIFT_0;
+u8 U8_GPIO_G_OUT_SHIFT_1;
+u8 U8_GPIO_G_OUT_SHIFT_2;
 
-
+u8 U8_GPIO_G_OUT_DEBUG;
 
 static const ts_gpio_in_def ts_gpio_s_in_init =
 {
@@ -33,12 +32,6 @@ static const ts_gpio_in_def ts_gpio_s_in_init =
     (u8)0,
     (u8)0
 };
-
-
-/* 出力定義 */
-u8 U8_GPIO_G_OUT_TASK_CHK;
-
-
 
 /* 関数プロトタイプ宣言 */
 static void func_gpio_s_in_judge( void );
@@ -68,10 +61,12 @@ void func_gpio_g_main( void )
 /**************************************************************/
 void func_gpio_g_init( void )
 {
-    ts_gpio_g_in_shift_0 = ts_gpio_s_in_init;           /* 初回はソフト判定OFFから開始 */
-    ts_gpio_g_in_shift_1 = ts_gpio_s_in_init;
-    ts_gpio_g_in_shift_2 = ts_gpio_s_in_init;
-    ts_gpio_g_in_neutral = ts_gpio_s_in_init;
+    U8_GPIO_G_OUT_NEUTRAL = CLEAR;
+    U8_GPIO_G_OUT_SHIFT_0 = CLEAR;
+    U8_GPIO_G_OUT_SHIFT_1 = CLEAR;
+    U8_GPIO_G_OUT_SHIFT_2 = CLEAR;
+
+    U8_GPIO_G_OUT_DEBUG = CLEAR;
 }
 
 
@@ -95,7 +90,11 @@ static void func_gpio_s_in_judge( void )
 static void func_gpio_s_out_update( void )
 {
     /* 一応 0bit目 以外はマスクしておく */
-    GPIO_OUT_TASK_CHK = U8_GPIO_G_OUT_TASK_CHK & (u8)0x01;
+    GPIO_OUT_SHIFT_NEUTRAL = U8_GPIO_G_OUT_NEUTRAL & (u8)0x01;
+
+    GPIO_OUT_SHIFT_0 = U8_GPIO_G_OUT_SHIFT_0 & (u8)0x01;
+    GPIO_OUT_SHIFT_1 = U8_GPIO_G_OUT_SHIFT_1 & (u8)0x01;
+    GPIO_OUT_SHIFT_2 = U8_GPIO_G_OUT_SHIFT_2 & (u8)0x01;
 }
 
 

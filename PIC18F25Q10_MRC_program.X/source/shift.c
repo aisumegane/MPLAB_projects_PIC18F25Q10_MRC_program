@@ -6,7 +6,6 @@
  */
 
 #include <xc.h>
-
 #include "userdefine.h"
 
 #include "shift.h"
@@ -135,6 +134,7 @@ static void func_shift_s_shift_degree_calc( void )
 /**************************************************************/
 static void func_shift_s_shift_change( void )
 {
+#if 0
     /* シフトポジション指定 */
     if( ts_gpio_g_in_neutral.u8_state == SET )
     {
@@ -175,6 +175,7 @@ static void func_shift_s_shift_change( void )
         servo_s_angle_set( u8_shift_s_deg_newtral_idx, SERVO_SHIFT_1 );
         servo_s_angle_set( u8_shift_s_deg_newtral_idx, SERVO_SHIFT_2 );
     }
+#endif
 }
 
 

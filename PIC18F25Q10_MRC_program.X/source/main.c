@@ -169,9 +169,9 @@ static void func_main_s_loop( void )
     func_int_g_main();          /* 割り込み処理 */
     func_gpio_g_main();         /* GPIOポート更新処理 */
     func_rc_g_main();           /* ラジコンプロポ duty取得処理 */
+    func_speedsens_g_main();    /* 回転数検出 */
 
     /* 計算処理 */
-    
     func_shift_g_main();        /* シフトチェンジ処理 */
     func_indicate_g_main();     /* 表示処理 */
     
@@ -196,6 +196,7 @@ static void func_main_s_init( void )
     func_int_g_init();
     func_gpio_g_init();
     func_rc_g_init();
+    func_speedsens_g_init();
     
     func_segment_g_init();
     func_servo_g_init();

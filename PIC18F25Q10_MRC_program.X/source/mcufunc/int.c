@@ -7,6 +7,7 @@
  */
 
 #include <xc.h>
+#include "pic18f25q10.h"
 #include "../userdefine.h"
 
 #include "adc.h"
@@ -25,12 +26,16 @@
 #define INT_FLAG_IOC                IOCIF
 #define INT_FLAG_TMR5_OVF           TMR5IF
 #define INT_FLAG_TMR1_GATE_CLOSE    TMR1GIF
+#define INT_FLAG_TMR1_OVERFLOW      TMR1IF
 #define INT_FLAG_TMR3_GATE_CLOSE    TMR3GIF
+#define INT_FLAG_TMR3_OVERFLOW      TMR3IF
 
 /* 関数プロトタイプ宣言 */
+static void func_int_s_timer1_gate_close( void );
+static void func_int_s_timer3_gate_close( void );
+static void func_int_s_timer1_overflow( void );
+static void func_int_s_timer3_overflow( void );
 
-
-/* duty取得処理関連 */
 
 
 /**************************************************************/
@@ -88,16 +93,28 @@ void __interrupt(low_priority) low_isr(void)
     
     if( INT_FLAG_TMR1_GATE_CLOSE == SET )
     { /* モータ回転数 取得用割り込み */
-        func_speedsens_g_collect_mtr_capture( TMR1 );
-        TMR1 = (u16)0;              /* タイマクリア ※タイマゲートオフ区間のはずなので、ここで１回クリアするだけでOK */
+        func_int_s_timer1_gate_close();
         INT_FLAG_TMR1_GATE_CLOSE = CLEAR;
+    }
+
+    if( INT_FLAG_TMR1_OVERFLOW == SET )
+    { /* モータ回転数 未検出割り込み */
+        /* TMR1のゲートオフ中はカウントが進まないので、TMRxGIF発生後直後にここにきて取得したキャプチャが無効な値として扱われることはない。 */
+        /* ただし回転検出そのものが１周期おきなので、回転検出の精度自体が下がる。 */
+        func_int_s_timer1_overflow();
+        INT_FLAG_TMR1_OVERFLOW = CLEAR;
     }
     
     if( INT_FLAG_TMR3_GATE_CLOSE == SET )
     { /* 1次側ギヤ回転数 取得用割り込み */
-        func_speedsens_g_collect_1stgear_capture( TMR3 );
-        TMR3 = (u16)0;              /* タイマクリア ※タイマゲートオフ区間のはずなので、ここで１回クリアするだけでOK */
+        func_int_s_timer3_gate_close();
         INT_FLAG_TMR3_GATE_CLOSE = CLEAR;
+    }
+
+    if( INT_FLAG_TMR3_OVERFLOW == SET )
+    { /* 1次側ギヤ回転数 未検出割り込み */
+        func_int_s_timer3_overflow();
+        INT_FLAG_TMR3_OVERFLOW = CLEAR;
     }
 }
 
@@ -109,6 +126,7 @@ void __interrupt(low_priority) low_isr(void)
 /**************************************************************/
 void func_int_g_main( void )
 {
+    ;
     /* 特に使う予定はない */
     /* 割り込み関連のフラグをループ側でクリアしたい場合はここで処理する */
 }
@@ -124,4 +142,37 @@ void func_int_g_init( void )
     ;
 }
 
+/* タイマ1ゲート 閉鎖割り込み */
+static void func_int_s_timer1_gate_close( void )
+{
+    u16 u16_data_buff;
+    u16_data_buff = (u16)0;
 
+    u16_data_buff = TMR1;
+    func_speedsens_g_collect_capture( u16_data_buff, &speedsens_status[ SPEEDSENS_CH_MTR ] );
+    TMR1 = (u16)0;              /* タイマクリア ※タイマゲートオフ区間のはずなので、ここで１回クリアするだけでOK */
+}
+
+/* タイマ1ゲート 閉鎖割り込み */
+static void func_int_s_timer3_gate_close( void )
+{
+    u16 u16_data_buff;
+    u16_data_buff = (u16)0;
+
+    u16_data_buff = TMR3;
+    func_speedsens_g_collect_capture( u16_data_buff, &speedsens_status[ SPEEDSENS_CH_1STGEAR ] );
+    TMR3 = (u16)0;              /* タイマクリア ※タイマゲートオフ区間のはずなので、ここで１回クリアするだけでOK */
+}
+
+/* タイマ1 オーバーフロー割り込み */
+static void func_int_s_timer1_overflow( void )
+{
+    func_speedsens_g_reset_capture_sts( &speedsens_status[ SPEEDSENS_CH_MTR ] );
+}
+
+
+/* タイマ3 オーバーフロー割り込み */
+static void func_int_s_timer3_overflow( void )
+{
+    func_speedsens_g_reset_capture_sts( &speedsens_status[ SPEEDSENS_CH_1STGEAR ] );
+}

@@ -80,6 +80,7 @@
 
 
 #include "./mcufunc/adc.h"
+#include "./mcufunc/dac.h"
 #include "./mcufunc/gpio.h"
 #include "./mcufunc/int.h"
 #include "./mcufunc/mcu_setup.h"
@@ -90,12 +91,13 @@
 #include "indicate.h"
 #include "shift.h"
 #include "radio_control.h"
+#include "speedsens.h"
 
 #include "main.h"
 
 
 /* ファイル内定義 */
-#define MAIN_TASK_DIVIDER       ((u8)10)
+#define MAIN_TASK_DIVIDER       ((u8)1)
 
 
 /* 関数プロトタイプ宣言 */
@@ -140,7 +142,7 @@ void  func_main_g_main_loop_judge( void )
 {
     u8_main_s_1ms_task_cnt++;
 
-    if( u8_main_s_1ms_task_cnt >= MAIN_TASK_DIVIDER )
+    if( u8_main_s_1ms_task_cnt >= MAIN_TASK_DIVIDER )       /* @@割り込み発生頻度高いとデバッグしずらいので、分周なくした */
     { /* 割り込み発生から分周完了 */
         u8_main_s_loop_go = SET;
         u8_main_s_1ms_task_cnt = (u8)0;
@@ -159,7 +161,7 @@ void  func_main_g_main_loop_judge( void )
 static void func_main_s_loop( void )
 {
     /* テスト出力 */
-    //U8_GPIO_G_OUT_DEBUG = SET;
+    GPIO_OUT_DEBUG = SET;
 
 
 
@@ -173,12 +175,12 @@ static void func_main_s_loop( void )
 
     /* 計算処理 */
     func_shift_g_main();        /* シフトチェンジ処理 */
-    func_indicate_g_main();     /* 表示処理 */
-    
     
     /* 出力処理 */
+    func_dac_g_main();          /* DAC出力処理 */
+    func_indicate_g_main();     /* 表示処理 */
 
-    //U8_GPIO_G_OUT_DEBUG = CLEAR;
+    GPIO_OUT_DEBUG = CLEAR;
 }
 
 
@@ -192,18 +194,25 @@ static void func_main_s_init( void )
     u8_main_s_loop_go = CLEAR;                  /* 初期化 */
     u8_main_s_1ms_task_cnt = (u8)0;            /* 初期化 */
     
+    /* 入力処理 */
     func_adc_g_init();
     func_int_g_init();
     func_gpio_g_init();
     func_rc_g_init();
     func_speedsens_g_init();
     
+    /* 計算処理 */
+    func_shift_g_init();
+
+    /* 出力処理 */
+    func_dac_g_init();
+    func_indicate_g_init();
+    func_speedsens_g_init();
+
+    
+    /* その他 */
     func_segment_g_init();
     func_servo_g_init();
-    
-
-    func_shift_g_init();
-    func_indicate_g_init();
 }
 
 

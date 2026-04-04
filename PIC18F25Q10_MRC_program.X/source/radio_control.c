@@ -547,7 +547,7 @@ static void func_rc_s_convert_tmrcount_to_duty( void )
 /**************************************************************/
 static void func_rc_s_debug_pulseout( void )
 {
-#if 1
+#if 0
     if( u8_rc_s_duty_cnt_debug < U8_MAX )
     {
         u8_rc_s_duty_cnt_debug++;

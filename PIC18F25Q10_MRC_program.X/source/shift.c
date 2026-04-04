@@ -85,7 +85,7 @@ static void func_shift_s_shift_position_decide( void )
 {
     if( u8_shift_g_shift_mode == SHIFT_MODE_MANUAL )
     { /* マニュアルシフト */
-        if( ( gpio_g_paddle_shift_sw.u8_state == HI ) &&
+        if( ( gpio_g_paddle_shift_sw.u8_state == LOW ) &&
             ( gpio_g_paddle_shift_sw.u8_state_bf == MID ))
         { /* シフトアップ */
             if( u8_shift_g_shift_position < SHIFT_POSI_7 )
@@ -97,7 +97,7 @@ static void func_shift_s_shift_position_decide( void )
                 u8_shift_g_shift_position = SHIFT_POSI_7;
             }
         }
-        else if( ( gpio_g_paddle_shift_sw.u8_state == LOW ) &&
+        else if( ( gpio_g_paddle_shift_sw.u8_state == HI ) &&
                  ( gpio_g_paddle_shift_sw.u8_state_bf == MID ))
         { /* シフトダウン */
             if( u8_shift_g_shift_position > SHIFT_POSI_1 )

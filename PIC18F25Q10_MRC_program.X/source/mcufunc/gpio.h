@@ -21,9 +21,9 @@ extern "C" {
 
 /* 出力ポート割り当て定義 */
 #define GPIO_OUT_SHIFT_NEUTRAL              LATB4
-#define GPIO_OUT_SHIFT_0                    LATB1
+#define GPIO_OUT_SHIFT_0                    LATB3
 #define GPIO_OUT_SHIFT_1                    LATB2
-#define GPIO_OUT_SHIFT_2                    LATB3
+#define GPIO_OUT_SHIFT_2                    LATB1
 #define GPIO_OUT_DEBUG                      LATB0
 
 

@@ -92,6 +92,7 @@
 #include "shift.h"
 #include "radio_control.h"
 #include "./tools/speedsens.h"
+#include "./speedcontrol.h"
 
 #include "main.h"
 
@@ -174,6 +175,7 @@ static void func_main_s_loop( void )
     func_speedsens_g_main();    /* 回転数検出 */
 
     /* 計算処理 */
+    func_speedcontrol_g_main(); /* 速度調整処理 */
     func_shift_g_main();        /* シフトチェンジ処理 */
     
     /* 出力処理 */
@@ -202,6 +204,7 @@ static void func_main_s_init( void )
     func_speedsens_g_init();
     
     /* 計算処理 */
+    func_speedcontrol_g_init();
     func_shift_g_init();
 
     /* 出力処理 */

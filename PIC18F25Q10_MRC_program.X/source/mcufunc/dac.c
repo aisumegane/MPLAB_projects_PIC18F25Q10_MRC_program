@@ -13,6 +13,7 @@
 #include "../mcufunc/gpio.h"
 #include "../radio_control.h"
 #include "../tools/speedsens.h"
+#include "../speedcontrol.h"
 
 #include "dac.h"
 
@@ -32,7 +33,8 @@ static void func_dac_s_debug_out( u32 u32_val, u32 u32_val_max );
 /**************************************************************/
 void func_dac_g_main( void )
 {
-    func_dac_s_debug_out( u8_rc_g_ch_duty_tbl[ RC_DUTY_CH_THROTTLE ], RC_CH_DUTY_100P );
+    //func_dac_s_debug_out( u8_rc_g_ch_duty_tbl[ RC_DUTY_CH_THROTTLE ], RC_CH_DUTY_100P );
+    func_dac_s_debug_out( u8_sc_g_throttle_duty_recalc, RC_CH_DUTY_100P );
     //func_dac_s_debug_out( (u32)u16_speedsens_g_speed_ave_1stgear, (u32)15000 );             /* 0~15000rpm の範囲を0~5VのDAC出力で表現 */
 }
 

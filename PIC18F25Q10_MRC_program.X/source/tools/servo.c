@@ -17,8 +17,8 @@
 /* ファイル内定義 */
 /* PIC16シリーズは割り算ができない(超遅い)。あらかじめ角度に相当するパルス幅をROM定義して配列参照でパッと呼び出す。 */
 /* ↓↓↓この値を変更する場合は合わせてタイマのクロック、PWM設定を全部見直す */
-#define SERVO_PWM_CNT_MAX            (u16)600U        /* サーボ角度:180度に相当する PWM-duty設定 */  /* Ton_servo/((1/Tosc)*prescaler) = 0.0024/((1/16MHz)*64) */
-#define SERVO_PWM_CNT_MIN            (u16)125U        /* サーボ角度:  0度に相当する PWM-duty設定 */  /* Ton_servo/((1/Tosc)*prescaler) = 0.0005/((1/16MHz)*64) */
+#define SERVO_PWM_CNT_MAX            (u16)312U        /* サーボ角度:180度に相当する PWM-dutyカウント数 */   /* func_mset_s_timer2_setup() のコメント参照 */
+#define SERVO_PWM_CNT_MIN            (u16)60U         /* サーボ角度:  0度に相当する PWM-dutyカウント数 */   /* func_mset_s_timer2_setup() のコメント参照 */
 
 #define SERVO_ANGLE_MAX              (u16)180U        /* サーボ 最大角度 */
 #define SERVO_ANGLE_MIN              (u16)0U          /* サーボ 最小角度 */
@@ -141,21 +141,24 @@ void servo_s_angle_set( u8 u8_angle_idx, u8 servo_num )
 
 
     /* この関数内で使用しているCCPモジュールを指定するのはなんとも微妙な感じ・・・ */
-    if( servo_num == SERVO_SHIFT_0 )
+    /* @@関数ポインタ化を検討する・・・・ */
+    if( servo_num == SERVO_CLUTCH )
     {
-        td_g_ccp1_pwm_duty_set( u16_angle_duty );
-    }
-    else if( servo_num == SERVO_SHIFT_1 )
-    {
-        td_g_ccp2_pwm_duty_set( u16_angle_duty );
-    }
-    else if( servo_num == SERVO_SHIFT_2 )
-    {
-        td_g_ccp3_pwm_duty_set( u16_angle_duty );
+        
     }
     else
     {
         ;       /* ここには来ない予定 */
+    }
+
+    switch ( servo_num )
+    { /* 例外はじけるように switch文使う */
+        case SERVO_CLUTCH:
+            td_g_ccp1_pwm_duty_set( u16_angle_duty );
+            break;
+        
+        default:
+            break;
     }
 }
 

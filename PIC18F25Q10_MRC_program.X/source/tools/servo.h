@@ -14,13 +14,11 @@ extern "C" {
 
 
 /* サーボ番号指定 */
-#define SERVO_SHIFT_0               ((u8)0)
-#define SERVO_SHIFT_1               ((u8)1)
-#define SERVO_SHIFT_2               ((u8)2)
+#define SERVO_CLUTCH                   ((u8)0)
 
 /* サーボ角度テーブル index */
-#define SERVO_DEG_IDX__0               (u8)0U
-#define SERVO_DEG_IDX__5               (u8)1U
+#define SERVO_DEG_IDX__0                (u8)0U
+#define SERVO_DEG_IDX__5                (u8)1U
 #define SERVO_DEG_IDX__10               (u8)2U
 #define SERVO_DEG_IDX__15               (u8)3U
 #define SERVO_DEG_IDX__20               (u8)4U

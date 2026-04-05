@@ -52,6 +52,8 @@
         <itemPath>source/shift.h</itemPath>
         <itemPath>source/radio_control.c</itemPath>
         <itemPath>source/radio_control.h</itemPath>
+        <itemPath>source/speedcontrol.c</itemPath>
+        <itemPath>source/speedcontrol.h</itemPath>
       </logicalFolder>
     </logicalFolder>
   </logicalFolder>

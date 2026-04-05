@@ -44,9 +44,17 @@ static void func_int_s_timer3_overflow( void );
 /*                                                            */
 /*  割り込みベクタはHigh/Lowで2コ                               */
 /**************************************************************/
-void __interrupt(high_priority) high_isr(void)
+void __interrupt (high_priority) high_isr(void)
 {
-    ;
+#if 1
+    if( INT_FLAG_IOC == SET )
+    {
+        IOCIE = CLEAR;                      /* IOCAF読み取り中に再度割り込み入ると読み取り失敗するので、処理開始前に禁止する */
+        func_rc_g_duty_detection();         /* ラジコンプロポ duty取得処理 */
+        /*INT_FLAG_IOC = CLEAR;*/           /* IOCFはIOC割り込みのステータスビット IOCの割り込みフラグは、上記関数内で個別にクリア */
+        IOCIE = SET;
+    }
+#endif
 }
 
 /**************************************************************/
@@ -76,7 +84,9 @@ void __interrupt(low_priority) low_isr(void)
         func_adc_g_adc_data_get();                 /* AD変換結果格納 & 残りの変換要求を処理する */
         PIR1 &= (u8)~INT_FLAG_AD_COMPLITE;                         /* 割り込みフラグクリア */
     }
-    
+
+#if 0
+    /* IOCによるduty取得は割り込み優先度を高くして、値が変動しないようにする */
     if( INT_FLAG_IOC == SET )
     {
         IOCIE = CLEAR;                      /* IOCAF読み取り中に再度割り込み入ると読み取り失敗するので、処理開始前に禁止する */
@@ -84,6 +94,7 @@ void __interrupt(low_priority) low_isr(void)
         /*INT_FLAG_IOC = CLEAR;*/           /* IOCFはIOC割り込みのステータスビット IOCの割り込みフラグは、上記関数内で個別にクリア */
         IOCIE = SET;
     }
+#endif
 
     if( INT_FLAG_TMR5_OVF == SET )
     { /* IOCでduty検知できなかった場合のみここに来る */

@@ -91,7 +91,7 @@
 #include "indicate.h"
 #include "shift.h"
 #include "radio_control.h"
-#include "speedsens.h"
+#include "./tools/speedsens.h"
 
 #include "main.h"
 
@@ -161,7 +161,7 @@ void  func_main_g_main_loop_judge( void )
 static void func_main_s_loop( void )
 {
     /* テスト出力 */
-    GPIO_OUT_DEBUG = SET;
+    //GPIO_OUT_DEBUG = SET;
 
 
 
@@ -180,7 +180,7 @@ static void func_main_s_loop( void )
     func_dac_g_main();          /* DAC出力処理 */
     func_indicate_g_main();     /* 表示処理 */
 
-    GPIO_OUT_DEBUG = CLEAR;
+    //GPIO_OUT_DEBUG = CLEAR;
 }
 
 

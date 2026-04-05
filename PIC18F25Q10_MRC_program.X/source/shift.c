@@ -14,11 +14,11 @@
 #include "./mcufunc/adc.h"
 #include "./tools/servo.h"
 #include "radio_control.h"
+#include "./tools/speedsens.h"
 
-#define SHIFT_CHK_TIME                ((u8)500)     /* *10ms */
+#define SHIFT_DRIVE_STOP_CNT                ((u8)10)     /* 10ms */
+#define SHIFT_DRIVE_STOP_SPEED              ((u16)0)     /* 0rpm */
 
-#define SERVO_POSI_LOWER_DEC          SERVO_DEG_IDX__15     /* 中心位置に対して下方向に何度ずらすか */
-#define SERVO_POSI_UPPER_ADD          SERVO_DEG_IDX__15     /* 中心位置に対して上方向に何度ずらすか */
 
 /* シフトチェンジの制御を担当 */
 
@@ -28,18 +28,28 @@ static void func_shift_s_shift_degree_calc( void );
 static void func_shift_s_shift_position_decide( void );
 static void func_shit_s_shift_position_output( void );
 
+static u8 u8_shift_s_shift_chg_enable_wait_cnt;
+static u8 u8_shift_s_shift_mode_req;
+
 u8 u8_shift_g_shift_mode;
 u8 u8_shift_g_shift_position;
 
-static u8 u8_shift_s_deg_newtral_idx;
-static u8 u8_shift_s_deg_upper_idx;
-static u8 u8_shift_s_deg_lower_idx;
-
-
-static u8 u8_shift_s_shift_chk_cnt;
-
 
 /* グローバル変数 */
+/**************************************************************/
+/*  Function:                                                 */
+/*  初期化関数                                                 */
+/*                                                            */
+/*                                                            */
+/**************************************************************/
+void func_shift_g_init( void )
+{
+    u8_shift_s_shift_mode_req = SHIFT_MODE_MANUAL;
+    u8_shift_g_shift_mode = SHIFT_MODE_MANUAL;
+    u8_shift_g_shift_position = SHIFT_POSI_0;
+    u8_shift_s_shift_chg_enable_wait_cnt = (u8)0;
+}
+
 /**************************************************************/
 /*  Function:                                                 */
 /*  main関数                                                   */
@@ -55,25 +65,6 @@ void func_shift_g_main( void )
     /* 出力制御 */
     func_shit_s_shift_position_output();        /* シフト位置出力処理 */
 }
-
-
-/**************************************************************/
-/*  Function:                                                 */
-/*  初期化関数                                                 */
-/*                                                            */
-/*                                                            */
-/**************************************************************/
-void func_shift_g_init( void )
-{
-    u8_shift_g_shift_mode = SHIFT_MODE_MANUAL;
-    u8_shift_g_shift_position = SHIFT_POSI_0;
-
-    u8_shift_s_deg_newtral_idx = (u8)0;
-    u8_shift_s_deg_upper_idx   = (u8)0;
-    u8_shift_s_deg_lower_idx   = (u8)0;
-}
-
-
 
 /**************************************************************/
 /*  Function:                                                 */
@@ -171,13 +162,34 @@ static void func_shit_s_shift_position_output( void )
 /**************************************************************/
 static void func_shift_s_shift_mode_decide( void )
 {
+    u8 u8_mode_before;
+
+    u8_mode_before = u8_shift_g_shift_mode;
+
+    if( u8_shift_s_shift_chg_enable_wait_cnt < U8_MAX )
+    {
+        u8_shift_s_shift_chg_enable_wait_cnt++;
+    }
+    
+    /* 変速モード変更要求 */
     if( gpio_g_shift_mode_sw.u8_state == HI )
     {
-        u8_shift_g_shift_mode = SHIFT_MODE_MANUAL;
+        u8_shift_s_shift_mode_req = SHIFT_MODE_MANUAL;
     }
     else
     {
-        u8_shift_g_shift_mode = SHIFT_MODE_AUTOMATIC;
+        u8_shift_s_shift_mode_req = SHIFT_MODE_AUTOMATIC;
     }
 
+    /* 停止状態でのみ、シフト操作モードの変更を許可する */
+    if( ( u8_shift_s_shift_chg_enable_wait_cnt >= SHIFT_DRIVE_STOP_CNT ) &&
+        ( u16_speedsens_g_speed_ave_1stgear == SHIFT_DRIVE_STOP_SPEED ) )               /* 1次ギヤで止まってる判定する場合、0,1,2のシフトレバーが接続状態でないとダメなので、条件としては微妙かも */
+    { /* 現在車は停止している */
+        u8_shift_g_shift_mode = u8_shift_s_shift_mode_req;          /* 現在の変速モード要求を反映する */
+    }
+
+    if( u8_mode_before != u8_shift_s_shift_chg_enable_wait_cnt )
+    { /* 変速モードに変化があった */
+        u8_shift_s_shift_chg_enable_wait_cnt = (u8)0;       /* クリア */
+    }
 }

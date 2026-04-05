@@ -30,20 +30,21 @@ u32  func_ud_g_calcmul_2x2_byte( u16 u16_arg1, u16 u16_arg2 )
     u16 u16_calc_buff;
     
     /* ローカル変数初期化 */
-    u16_arg1_upper_8bit = (u8)0;
-    u16_arg1_lower_8bit = (u8)0;
-    u16_arg2_upper_8bit = (u8)0;
-    u16_arg2_lower_8bit = (u8)0;
+    u16_arg1_upper_8bit = (u16)0;
+    u16_arg1_lower_8bit = (u16)0;
+    u16_arg2_upper_8bit = (u16)0;
+    u16_arg2_lower_8bit = (u16)0;
     u16_calc_buff = (u16)0;
     u32_result = (u32)0;
     
     /*  */
-    u16_arg1_upper_8bit = u16_arg1 >> 8U;       /* 8bit*8bit の計算をするので、箱は16bitで足りる */
-    u16_arg1_lower_8bit = u16_arg1;
+    u16_arg1_upper_8bit = ( u16_arg1 >> 8U ) & 0x00FF;       /* 8bit*8bit の計算をするので、箱は16bitで足りる */
+    u16_arg1_lower_8bit = u16_arg1 & 0x00FF;    /* 下位8bitのみにする */
     
-    u16_arg2_upper_8bit = u16_arg2 >> 8U;
-    u16_arg2_lower_8bit = u16_arg2;
+    u16_arg2_upper_8bit = ( u16_arg2 >> 8U ) & 0x00FF;
+    u16_arg2_lower_8bit = u16_arg2 & 0x00FF;    /* 下位8bitのみにする */
     
+    /* 下の4式は 8bit×8bit 前提 */
     /* 掛け算：1/4 */
     u16_calc_buff = u16_arg1_upper_8bit * u16_arg2_upper_8bit;        /* ハードウェア演算に移動する */
     u32_result += ((u32)u16_calc_buff) << 16U;

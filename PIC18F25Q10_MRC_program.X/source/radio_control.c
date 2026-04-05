@@ -482,19 +482,18 @@ static void func_rc_s_convert_tmrcount_to_duty( void )
             { /* 正常：後ろのタイミングのタイマカウントのほうが大きい */
                 u16_calc_buff = u16_calc_buff2 - u16_calc_buff;
 
-                /* 上下限クリップ処理 */
                 if( u16_calc_buff >= RC_DUTY_0P_CNT )
-                {
-                    u16_tmr_cnt_gap = u16_calc_buff - RC_DUTY_0P_CNT;
+                { /* 下限のパルス幅以上の値がある */
+                    u16_tmr_cnt_gap = u16_calc_buff - RC_DUTY_0P_CNT;       /* 下限のパルス分を減算 */
 
                     if( u16_tmr_cnt_gap < RC_DUTY_CONVERSION_ROUND)
-                    { /* ほぼ0% */
+                    { /* ほぼ0%よりのパルス幅 */
                         u16_tmr_cnt_gap = (u16)0;                       /* 0%に丸め込む */
                     }
 
                     if( u16_tmr_cnt_gap > u16_tmr_cnt_base )
                     { /* 100%より大きい */
-                        u16_tmr_cnt_gap = u16_tmr_cnt_base;
+                        u16_tmr_cnt_gap = u16_tmr_cnt_base;             /* 100%に丸め込む */
                     }
                     else
                     {
@@ -506,7 +505,7 @@ static void func_rc_s_convert_tmrcount_to_duty( void )
                     }
                 }
                 else
-                {
+                { /* 0%より小さいパルス幅 */
                     u16_tmr_cnt_gap = (u16)0;
                 }
             }
@@ -547,13 +546,13 @@ static void func_rc_s_convert_tmrcount_to_duty( void )
 /**************************************************************/
 static void func_rc_s_debug_pulseout( void )
 {
-#if 0
+#if 1
     if( u8_rc_s_duty_cnt_debug < U8_MAX )
     {
         u8_rc_s_duty_cnt_debug++;
     }
 
-    if( u8_rc_s_duty_cnt_debug >= u8_rc_g_ch_duty_tbl[ RC_DUTY_CH_PADDLE_SHIFT_INPUT ] )
+    if( u8_rc_s_duty_cnt_debug >= u8_rc_g_ch_duty_tbl[ RC_DUTY_CH_THROTTLE ] )
     {
         u8_rc_s_duty_cnt_debug = (u8)0;
 

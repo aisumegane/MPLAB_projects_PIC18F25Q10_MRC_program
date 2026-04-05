@@ -6,11 +6,11 @@
  */
 
 #include <xc.h>
-#include "userdefine.h"
+#include "../userdefine.h"
 
-#include "./mcufunc/gpio.h"
-#include "./mcufunc/mcu_setup.h"
-#include "./mcufunc/timer_driver.h"
+#include "../mcufunc/gpio.h"
+#include "../mcufunc/mcu_setup.h"
+#include "../mcufunc/timer_driver.h"
 #include "speedsens.h"
 
 

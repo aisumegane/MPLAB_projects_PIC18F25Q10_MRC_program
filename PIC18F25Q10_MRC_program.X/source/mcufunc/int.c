@@ -14,7 +14,7 @@
 #include "gpio.h"
 #include "../main.h"
 #include "../radio_control.h"
-#include "../speedsens.h"
+#include "../tools/speedsens.h"
 
 #include "int.h"
 

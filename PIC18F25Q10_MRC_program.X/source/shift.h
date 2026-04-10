@@ -23,6 +23,7 @@ extern "C" {
 #define SHIFT_POSI_5                ((u8)5)
 #define SHIFT_POSI_6                ((u8)6)
 #define SHIFT_POSI_7                ((u8)7)
+#define SHIFT_POSI_NUM              (SHIFT_POSI_7 + (u8)1)
 
 
 extern void func_shift_g_main( void );

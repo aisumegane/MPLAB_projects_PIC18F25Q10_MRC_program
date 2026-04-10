@@ -37,12 +37,49 @@
 #define SHIFT_SERVO_ANGLE_CLUTCH_ON         SERVO_DEG_IDX__85
 #define SHIFT_SERVO_ANGLE_CLUTCH_OFF        SERVO_DEG_IDX__0
 
-/* シフトチェンジの制御を担当 */
+/* オートマチック変速定義 */
+/* ※メインMCU側では0~7の計8ポジションで指令を送っているため、idxは0始まり... */
+#define SHIFT_POSI_THRESHOLD_NUM            ((u8)8)
+
+/* 変速基準回転数定義 */
+/* 実機のトルクを見て決めたい */
+/* あんまり速度上がらない気がする */
+/* ➡方針決め：インバータへの印加duty50%の時の出力で得られる回転数を閾値として設定する */
+/* バッテリ電圧がなくなってきたときの対応はどうするか？上の方へはシフトできない仕様でOK？ */
+#define SHIFT_POSI_0_APPR_RPM       ((u16)1000)
+#define SHIFT_POSI_1_APPR_RPM       ((u16)2000)
+#define SHIFT_POSI_2_APPR_RPM       ((u16)3000)
+#define SHIFT_POSI_3_APPR_RPM       ((u16)4000)
+#define SHIFT_POSI_4_APPR_RPM       ((u16)5000)
+#define SHIFT_POSI_5_APPR_RPM       ((u16)8000)
+#define SHIFT_POSI_6_APPR_RPM       ((u16)11000)
+#define SHIFT_POSI_7_APPR_RPM       ((u16)14000)
+
+#define SHIFT_POSI_CHG_HIS_MAX                ((u8)500)                /* 変速のヒステリシス最大値(実質、レブリミット) */
+
+#define SHIFT_POSI_REMAIN_CNT       ((u16)700)       /* サーボの稼働累計時間よりは長くしないとダメ。 */
+
+/* だめかも・・・↑この回転数は現在のシフト位置に対して、どこまで上げられるのかギヤ費によって決まる。モータの回転数範囲に対して、上の段でどこまで上がるのか・・・・*/
+/* ある領域における電圧変化に対してどこまで回転数幅を持たせられるかはどうやって決めるのか？ */
+/* ひとまず実装を進めるために暫定値として計算式を立てることにした 2026/04/06 */
+
+/* @@メモ */
+/* 変速域内でのdutyはリモコンのレバー位置に応じていつでも0~100で操作可能にする。 */
+/* ただし、入力に対して実際の速度が上記のヒステリシス範囲を超えた場合、変速を行う */
+/* →この制御が一番単純でいいんじゃないか説 */
+/* 本来シフト位置に対してどの程度の回転数域に収めるかは運転者が決めるが、そこの判断をマイコンにやらせる */
+
+/* ・・・この時のヒステリシスをレブリミットと定義するのが適切かも？？？ */
+/* １つの変速範囲において、どこまで回転数を上げないと上のシフト位置に遷移できないか、そのレベルを可変にする・・・→あっている気がするンゴ */
+
+
 
 /* 関数プロトタイプ宣言 */
 static void func_shift_s_shift_mode_decide( void );
 static void func_shift_s_shift_degree_calc( void );
 static void func_shift_s_shift_position_req_decide( void );
+static void func_shift_s_shift_position_decide_mode_manual( void );
+static void func_shift_s_shift_position_decide_mode_automatic( void );
 static void func_shift_s_clutch_control( void );
 static void func_shift_s_shifting_control( void );
 static void func_shift_s_shift_sequence( void );
@@ -60,6 +97,21 @@ u8 u8_shift_g_shift_position_req;
 u8 u8_shift_g_shift_position_output;
 
 u16 u16_shift_s_clutch_off_cnt;
+
+static u16 u16_shift_s_position_remain_cnt;
+
+/* パラメータ定義 */
+static const u16 u16_shift_s_shift_posi_50per_speed_ary[ SHIFT_POSI_NUM ] =
+{
+    SHIFT_POSI_0_APPR_RPM,
+    SHIFT_POSI_1_APPR_RPM,
+    SHIFT_POSI_2_APPR_RPM,
+    SHIFT_POSI_3_APPR_RPM,
+    SHIFT_POSI_4_APPR_RPM,
+    SHIFT_POSI_5_APPR_RPM,
+    SHIFT_POSI_6_APPR_RPM,
+    SHIFT_POSI_7_APPR_RPM,
+};
 
 
 /* グローバル変数 */
@@ -95,60 +147,165 @@ void func_shift_g_main( void )
     func_shift_s_shift_mode_decide();           /* 変則モード確定処理 */
     func_shift_s_shift_position_req_decide();   /* シフト位置要求設定処理 */
 
-    func_shift_s_shift_sequence();              /* 変速制御 */
+    func_shift_s_shift_sequence();              /* 変速シーケンス制御 */
 
     /* 出力制御 */
     func_shift_s_clutch_control();              /* クラッチ制御 */
-    func_shift_s_shifting_control();            /* シフト位置出力処理 */
+    func_shift_s_shifting_control();            /* シフト位置出力制御 */
 }
 
 /**************************************************************/
 /*  Function:                                                 */
-/*  関数                                                 */
-/*                                                            */
+/*  関数                                                      */
+/*  シフト位置を確定させる                                      */
 /*                                                            */
 /**************************************************************/
 static void func_shift_s_shift_position_req_decide( void )
 {
     if( u8_shift_g_shift_mode == SHIFT_MODE_MANUAL )
     { /* マニュアルシフト */
-        if( ( gpio_g_paddle_shift_sw.u8_state == LOW ) &&
-            ( gpio_g_paddle_shift_sw.u8_state_bf == MID ))
-        { /* シフトアップ */
-            if( u8_shift_g_shift_position_req < SHIFT_POSI_7 )
-            {
-                u8_shift_g_shift_position_req++;
-            }
-            else
-            {
-                u8_shift_g_shift_position_req = SHIFT_POSI_7;
-            }
-        }
-        else if( ( gpio_g_paddle_shift_sw.u8_state == HI ) &&
-                 ( gpio_g_paddle_shift_sw.u8_state_bf == MID ))
-        { /* シフトダウン */
-            if( u8_shift_g_shift_position_req > SHIFT_POSI_1 )
-            {
-                u8_shift_g_shift_position_req--;
-            }
-            else
-            {
-                u8_shift_g_shift_position_req = SHIFT_POSI_0;
-            }
-        }
-        else
-        {
-            ;               /* 現在のシフト位置を維持 */
-        }
+        func_shift_s_shift_position_decide_mode_manual();
     }
     else if( u8_shift_g_shift_mode == SHIFT_MODE_AUTOMATIC )
     {
-
+        func_shift_s_shift_position_decide_mode_automatic();
     }
     else
     {
         ;
     }
+}
+
+/**************************************************************/
+/*  Function:                                                 */
+/*  シフト位置確定制御 マニュアルバージョン                       */
+/*                                                            */
+/**************************************************************/
+static void func_shift_s_shift_position_decide_mode_manual( void )
+{
+    if( ( gpio_g_paddle_shift_sw.u8_state == LOW ) &&
+        ( gpio_g_paddle_shift_sw.u8_state_bf == MID ))
+    { /* シフトアップ */
+        if( u8_shift_g_shift_position_req < SHIFT_POSI_7 )
+        {
+            u8_shift_g_shift_position_req++;
+        }
+        else
+        {
+            u8_shift_g_shift_position_req = SHIFT_POSI_7;
+        }
+    }
+    else if( ( gpio_g_paddle_shift_sw.u8_state == HI ) &&
+             ( gpio_g_paddle_shift_sw.u8_state_bf == MID ))
+    { /* シフトダウン */
+        if( u8_shift_g_shift_position_req > SHIFT_POSI_1 )
+        {
+            u8_shift_g_shift_position_req--;
+        }
+        else
+        {
+            u8_shift_g_shift_position_req = SHIFT_POSI_0;
+        }
+    }
+    else
+    { /* 要求なし */
+        ;               /* 現在のシフト位置を維持 */
+    }
+}
+
+/**************************************************************/
+/*  Function:                                                 */
+/*  シフト位置確定制御 オートマチックバージョン                   */
+/*  一番ここが複雑になるかも                                    */
+/**************************************************************/
+static void func_shift_s_shift_position_decide_mode_automatic( void )
+{
+    u16 u16_shift_up_thr_speed;
+    u16 u16_shift_down_thr_speed;
+    u8 u8_shift_chg_dir;
+    u16 u16_shift_his_speed;
+    u32 u32_calc_buff;
+    
+    u16 u16_shift_thr_speed_his;        /* 変速閾値ヒステリシス */
+    
+    u16 u16_position_rpm_1minus;
+    u16 u16_position_rpm_1plus;
+    
+    
+    /* 変速位置固定カウント */
+    /* 変速後は一定時間変速を許可しない */
+    if( u16_shift_s_position_remain_cnt < U16_MAX )
+    {
+        u16_shift_s_position_remain_cnt++;
+    }
+    
+    
+    /* 現在のギヤの前後の段数における実回転数を算出する */
+    /* 変速後のシフトダウン、ブリッピング基準とする */
+    /* @@現在の"モータ"側回転数から、算出する */
+    
+    
+    
+    /* シフトチェンジのレブリミットレベルを算出する */
+    /* ただし、現在のギヤ位置から見て、最大出力で到達できそうな回転数範囲に制限をかける */
+    /* @@シフトダウンの下限値回転数が、１段下のシフトアップ回転数と被らないように注意する。実測合わせ要検討 */
+    u32_calc_buff = func_ud_g_calcmul_2x2_byte( (u16)u8_rc_g_ch_duty_tbl[RC_DUTY_CH_REV_LIMIT], (u16)SHIFT_POSI_CHG_HIS_MAX );
+    u32_calc_buff = func_ud_g_calcdiv_4x4_byte( u32_calc_buff, (u32)RC_CH_DUTY_100P );
+    u16_shift_thr_speed_his = (u16)u32_calc_buff;
+    
+    
+    /* シフトチェンジの回転数閾値を計算する */
+    if( u8_shift_g_shift_position_output == SHIFT_POSI_0 )
+    { /* 現在0速：シフトアップのみ可能 */
+        u16_shift_up_thr_speed   = u16_shift_s_shift_posi_50per_speed_ary[ SHIFT_POSI_0 ] + u16_shift_thr_speed_his;
+        u16_shift_down_thr_speed = (u16)0;      /* @@ココの値どうしよう... */
+    }
+    else if( u8_shift_g_shift_position_output == SHIFT_POSI_7 )
+    { /* 現在7速：シフトダウンのみ可能 */
+        u16_shift_up_thr_speed   = U16_MAX;    /* ひとまず変速不可能な回転数にしておく */
+        if( u16_shift_s_shift_posi_50per_speed_ary[ SHIFT_POSI_7 ] > u16_shift_thr_speed_his )
+        {
+            u16_shift_down_thr_speed = u16_shift_s_shift_posi_50per_speed_ary[ SHIFT_POSI_6 ] - u16_shift_thr_speed_his;
+        }
+    }
+    else
+    { /* "現在" 1～6速 */
+        u16_shift_up_thr_speed = u16_shift_s_shift_posi_50per_speed_ary[ u8_shift_g_shift_position_output ] + u16_shift_thr_speed_his;
+        u16_shift_down_thr_speed = u16_shift_s_shift_posi_50per_speed_ary[ u8_shift_g_shift_position_output ] - u16_shift_thr_speed_his;
+    }
+    
+    /* 変速処理 */
+    if( u16_speedsens_g_speed_ave_1stgear >= u16_shift_up_thr_speed )
+    { /* シフトアップ閾値回転数を超えた */
+        if( u8_shift_g_shift_position_req < SHIFT_POSI_7 )
+        {
+            u8_shift_g_shift_position_req++;
+        }
+        else
+        {
+            u8_shift_g_shift_position_req = SHIFT_POSI_7;
+        }
+    }
+    else if( u16_speedsens_g_speed_ave_1stgear <= u16_shift_down_thr_speed )
+    {
+        if( u8_shift_g_shift_position_req > SHIFT_POSI_1 )
+        {
+            u8_shift_g_shift_position_req--;
+        }
+        else
+        {
+            u8_shift_g_shift_position_req = SHIFT_POSI_0;
+        }
+    }
+    else
+    { /* 50%出力での変速域内 */
+        ;       /* 現在のシフトポジションを維持 */
+    }
+    
+    
+    /* ブリッピング制御 */
+    
+    
 }
 
 

@@ -20,7 +20,7 @@ extern void func_speedcontrol_g_main( void );
 extern void func_speedcontrol_g_init( void );
 
 extern u8 u8_sc_s_throttle_dir;
-extern u8 u8_sc_g_throttle_duty_recalc;
+extern u8 u8_sc_g_throttle_rc_ch_duty_target;
 
 #ifdef	__cplusplus
 }

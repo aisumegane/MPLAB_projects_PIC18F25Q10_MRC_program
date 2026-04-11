@@ -12,6 +12,12 @@
 extern "C" {
 #endif
 
+#define TIMER_INVERTER_DUTY_MAX_CNT             ((u16)2000)
+#define TIMER_INVERTER_DUTY_0P                  ((u16)(0))
+#define TIMER_INVERTER_DUTY_1P                  ((u16)(0))
+#define TIMER_INVERTER_DUTY_5P                  ((u16)(0))
+
+
 /* タイマ5 */
 extern void func_mset_g_timer5_onoff( u8 u8_state );
 extern void func_mset_g_timer5_couter_set( u16 u16_val );

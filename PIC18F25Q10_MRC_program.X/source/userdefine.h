@@ -32,6 +32,10 @@ typedef  unsigned char   u8;
 typedef  unsigned short  u16;
 typedef  unsigned long   u32;
 
+typedef  signed char    s8;
+typedef  signed short   s16;
+typedef  signed long    s32;
+
 #define     U8_MAX     ((u8)0xFF)
 #define     U16_MAX    ((u16)0xFFFF)
 #define     U32_MAX    ((u32)0xFFFFFFFF)

@@ -36,6 +36,7 @@
 #define SC_CONST_DUTY_CTRL_DEC          TIMER_INVERTER_DUTY_1P  /* 一定duty制御での減速量 */
 
 u8 u8_sc_s_throttle_dir;
+u8 u8_sc_s_throttle_dir_before;
 u8 u8_sc_g_throttle_rc_ch_duty_target;        /* 目標duty */
 u8 u8_sc_g_throttle_duty_ref;           /* 指令duty */
 u16 u16_sc_s_throttle_inv_duty_output;      /* インバータへの出力duty */        /* 回転数制御でも使うので、0~100だとちょっと精度が足りない。->RC_DUTYとは別のdutyを定義する */
@@ -62,7 +63,9 @@ static u16 func_sc_s_rpm_pi_ctrl( u16 u16_speed_target, u16 u16_speed_now, u16 u
 /**************************************************************/
 void func_speedcontrol_g_init( void )
 {
-    u8_sc_s_throttle_dir = SC_THROTTLE_DIR_NONE;
+    u8_sc_s_throttle_dir        = SC_THROTTLE_DIR_NONE;
+    u8_sc_s_throttle_dir_before = SC_THROTTLE_DIR_NONE;
+
     u8_sc_g_throttle_rc_ch_duty_target = RC_CH_DUTY_0P;
     u8_sc_g_throttle_duty_ref    = RC_CH_DUTY_0P;
     u16_sc_s_throttle_inv_duty_output = RC_CH_DUTY_0P;
@@ -81,6 +84,7 @@ void func_speedcontrol_g_init( void )
 void func_speedcontrol_g_main( void )
 {
     /* グローバル変数更新 */
+    u8_sc_s_throttle_dir_before = u8_sc_s_throttle_dir;             /* 前回のストットルの方向を保存しておく */                      /* やっぱポインタ引数の関数やめたほうがいいかも・・・グローバル変数を多用するソフトの構成上、あまりきれいに書けない */
     func_sc_s_throttle_per_dir_update( &u8_sc_g_throttle_rc_ch_duty_target ,&u8_sc_s_throttle_dir );     /* dutyをスロットル中心が0になるように再計算 */
     func_sc_s_output_duty_update( &u16_sc_s_throttle_inv_duty_output );                                  /* 出力duty更新       */
 
@@ -203,7 +207,7 @@ static void func_sc_s_output_duty_update( u16 *u16_duty_now )
             break;
 
         case SHIFT_SEQ_CLUTCH_ON_DRIVE:
-            /* 一定duty制御領域 */
+            /* 一定duty制御領域 */  /* @@この関数はインバータ出力側に移動するのが適切かも */
             u16_duty_new = func_sc_s_duty_ctrl( u8_sc_g_throttle_rc_ch_duty_target, *u16_duty_now );           /* 狙いのdutyを出したときに回転数が変速閾値超えたなら、勝手に変速するだけ duty制御側は特に何もしない */
             break;
 

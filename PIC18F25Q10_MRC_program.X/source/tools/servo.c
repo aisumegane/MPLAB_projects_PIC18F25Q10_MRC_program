@@ -160,16 +160,15 @@ void servo_s_angle_set( u8 u8_angle_idx, u8 servo_num )
         case SERVO_CLUTCH:
 
         /* デバッグ */
-#if 1
-        if( gpio_g_paddle_shift_sw.u8_state == SET )
-        {
-            td_g_pwm3_pwm_duty_set( SERVO_ANGLE___0DEG );
-        }
-        else
-        {
-            td_g_pwm3_pwm_duty_set( SERVO_ANGLE__180DEG );
-        }
-
+#if 0
+            if( gpio_g_paddle_shift_sw.u8_state == SET )
+            {
+                td_g_pwm3_pwm_duty_set( SERVO_ANGLE___0DEG );
+            }
+            else
+            {
+                td_g_pwm3_pwm_duty_set( SERVO_ANGLE__180DEG );
+            }
 #else
             td_g_pwm3_pwm_duty_set( u16_angle_duty );
 #endif

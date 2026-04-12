@@ -93,6 +93,7 @@
 #include "radio_control.h"
 #include "./tools/speedsens.h"
 #include "./speedcontrol.h"
+#include "./tools/inverter.h"
 
 #include "main.h"
 
@@ -162,7 +163,7 @@ void  func_main_g_main_loop_judge( void )
 static void func_main_s_loop( void )
 {
     /* テスト出力 */
-    //GPIO_OUT_DEBUG = SET;
+    GPIO_OUT_DEBUG = SET;
 
 
 
@@ -181,8 +182,9 @@ static void func_main_s_loop( void )
     /* 出力処理 */
     func_dac_g_main();          /* DAC出力処理 */
     func_indicate_g_main();     /* 表示処理 */
+    func_inverter_g_main();     /* インバータ制御処理 */
 
-    //GPIO_OUT_DEBUG = CLEAR;
+    GPIO_OUT_DEBUG = CLEAR;
 }
 
 
@@ -211,6 +213,7 @@ static void func_main_s_init( void )
     func_dac_g_init();
     func_indicate_g_init();
     func_speedsens_g_init();
+    func_inverter_g_init();
 
     
     /* その他 */

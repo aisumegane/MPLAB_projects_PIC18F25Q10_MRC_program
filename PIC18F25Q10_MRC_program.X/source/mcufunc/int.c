@@ -175,10 +175,14 @@ static void func_int_s_timer3_gate_close( void )
     TMR3 = (u16)0;              /* タイマクリア ※タイマゲートオフ区間のはずなので、ここで１回クリアするだけでOK */
 }
 
+
+/* @@オーバーフロー側はデバッグでのデバッグが厳しい */
+/* 評価する方法考えてみる。　動き的には多分大丈夫そうだが。 */
 /* タイマ1 オーバーフロー割り込み */
 static void func_int_s_timer1_overflow( void )
 {
     func_speedsens_g_reset_capture_sts( &speedsens_status[ SPEEDSENS_CH_MTR ] );
+    speedsens_status[ SPEEDSENS_CH_MTR ] .u8_cap_timer_reload = SET;                /* リロードは上記初期化関数内でSETしてないので、ここで設定 */
 }
 
 
@@ -186,4 +190,5 @@ static void func_int_s_timer1_overflow( void )
 static void func_int_s_timer3_overflow( void )
 {
     func_speedsens_g_reset_capture_sts( &speedsens_status[ SPEEDSENS_CH_1STGEAR ] );
+    speedsens_status[ SPEEDSENS_CH_1STGEAR ] .u8_cap_timer_reload = SET;                /* リロードは上記初期化関数内でSETしてないので、ここで設定 */
 }

@@ -13,6 +13,8 @@ extern "C" {
 #endif
 
 #define SPEEDSENS_MAX_SPEED_AT_1_CAPTURE   ((u32)30000000)               /* キャプチャ1あたりの 回転数 */
+/*#define SPEEDSENS_MIN_SPEED_DETECTABLE   ((u16)( SPEEDSENS_MAX_SPEED_AT_1_CAPTURE / (u32)U16_MAX ))*/         /* ~= 458rpm */
+#define SPEEDSENS_MIN_SPEED_DETECTABLE     ((u16)500)           /* ちょっと余裕見て設定 */
 
 #define SPEEDSENS_CH_MTR                   ((u8)0)
 #define SPEEDSENS_CH_1STGEAR               ((u8)1)

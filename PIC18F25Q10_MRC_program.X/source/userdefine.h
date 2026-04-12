@@ -14,6 +14,10 @@ extern "C" {
 
 #include "./mcufunc/pic18f25q10.h"
 
+/* 未使用関数設定 */
+#define UNUSED_FUNCTION_HIDE_SETTING        OFF
+
+
 /* 共通マクロ設定 */
 #define     CLEAR   0U
 #define     OFF     0U

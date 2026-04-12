@@ -154,7 +154,7 @@ void servo_s_angle_set( u8 u8_angle_idx, u8 servo_num )
     switch ( servo_num )
     { /* 例外はじけるように switch文使う */
         case SERVO_CLUTCH:
-            td_g_ccp1_pwm_duty_set( u16_angle_duty );
+            td_g_pwm3_pwm_duty_set( u16_angle_duty );
             break;
         
         default:

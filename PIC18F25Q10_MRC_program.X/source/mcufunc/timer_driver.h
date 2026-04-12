@@ -25,11 +25,19 @@ extern u16 func_mset_g_timer5_read( void );
 
 
 /* CCP機能 */
-extern void td_g_ccp1_pwm_duty_set( u16 u16_duty );
-extern void td_g_ccp2_pwm_duty_set( u16 u16_duty );
-extern void td_g_ccp3_pwm_duty_set( u16 u16_duty );
 
 
+/* PWM機能 */
+extern void td_g_pwm3_pwm_duty_set( u16 u16_duty );
+
+
+
+/* 未使用関数群 */
+#if( UNUSED_FUNCTION_HIDE_SETTING == SET )
+extern void td_g_ccp1_mode_pwm_duty_set( u16 u16_duty );                /* CCP1 Mode:PWM duty設定関数 */
+extern void td_g_ccp2_mode_pwm_duty_set( u16 u16_duty );                /* CCP2 Mode:PWM duty設定関数 */
+extern void td_g_pwm4_pwm_duty_set( u16 u16_duty );                     /* PWM4 PWM duty設定関数      */
+#endif
 
 #ifdef	__cplusplus
 }

@@ -93,7 +93,16 @@ void func_speedsens_g_init( void )
 void func_speedsens_g_collect_capture( u16 u16_capture, ts_speed_status *sts )
 {
     /* キャプチャ保存処理 */
-    sts->u16_p_capture_buff[ (sts->u8_buff_idx) ] = u16_capture;
+    if( sts->u8_cap_timer_reload == SET )
+    { /* ゲート クローズ時点でタイマのリロードが発生していた */
+        sts->u16_p_capture_buff[ (sts->u8_buff_idx) ] = U16_MAX;            /* 最大値を設定 */
+        sts->u8_cap_timer_reload = CLEAR;                                   /* リロードフラグ クリア */
+    }
+    else
+    { /* リロードなし：適切な回転数帯 */
+        sts->u16_p_capture_buff[ (sts->u8_buff_idx) ] = u16_capture;        /* タイマの値をそのまま取得する */
+    }
+
     
     if( sts->u8_buff_idx < sts->u8_buff_num )
     {
@@ -173,14 +182,17 @@ static u16 func_speedsens_s_calc_speed( ts_speed_status *sts )
     u16_result = (u16)0;
     u32_speed = (u32)0;
     
-    if( ( sts->u8_buffer_filled == SET ) &&
-        ( sts->u8_cap_timer_reload == CLEAR ) )
+    if( sts->u8_buffer_filled == SET )
     { /* バッファの更新が発生している & タイマの折り返しがない */
         u32_speed = (u32)SPEEDSENS_MAX_SPEED_AT_1_CAPTURE / (u32)(sts->u16_capture_ave);        /* キャプチャ1あたりの回転数 / キャプチャ値：キャプチャがx倍になれば、回転数は1/xになる関係 */
 
         if( u32_speed > U16_MAX )
         { /* 回転数が速すぎる */
             u16_result = U16_MAX;
+        }
+        else if( u32_speed < SPEEDSENS_MIN_SPEED_DETECTABLE )
+        { /* 検出可能回転数より下は、0rpmにならずに止まってしまうため、0rpmへ上書きする */
+            u16_result = (u16)0;
         }
         else
         {

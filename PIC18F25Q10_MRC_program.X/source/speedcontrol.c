@@ -54,7 +54,7 @@ static void func_sc_s_throttle_per_dir_update( u8 *u8_per, u8 *u8_dir );
 static void func_sc_s_throttle_threshold_update( u8 *u8_forward_th, u8 *u8_backward_th );
 static void func_sc_s_output_duty_update( u16 *u16_duty_output );
 static u16 func_sc_s_duty_ctrl( u8 u8_duty_target, u16 u16_duty_now );
-static u16 func_sc_s_rpm_pi_ctrl( u16 u16_speed_target, u16 u16_speed_now, u16 u16_duty_now )
+static u16 func_sc_s_rpm_pi_ctrl( u16 u16_speed_target, u16 u16_speed_now, u16 u16_duty_now );
 
 /**************************************************************/
 /*  Function:                                                 */
@@ -85,7 +85,7 @@ void func_speedcontrol_g_main( void )
     func_sc_s_output_duty_update( &u16_sc_s_throttle_inv_duty_output );                                  /* 出力duty更新       */
 
 
-    func_sc_s_speed_output( u16_sc_s_throttle_inv_duty_output );                                         /* 出力制御           */
+    //func_sc_s_speed_output( u16_sc_s_throttle_inv_duty_output );                                         /* 出力制御           */
 }
 
 
@@ -145,7 +145,7 @@ static void func_sc_s_throttle_per_dir_update( u8 *u8_per, u8 *u8_dir )
     }
     else
     { /* 中立状態 */
-        *u8_per = RC_CH_DUTY_0P;
+        *u8_per = RC_CH_DUTY_0P;                /* リモコンのオフセット設定に依存して中心がずれちゃうっぽい。あとT8FBの可変抵抗がBカーブになっているような雰囲気あり？？？ */
         *u8_dir = SC_THROTTLE_DIR_NONE;
     }
 }

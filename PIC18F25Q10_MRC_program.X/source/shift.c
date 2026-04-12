@@ -238,7 +238,7 @@ static void func_shift_s_shift_position_decide_mode_manual( void )
         u8_shift_g_shift_position_req = SHIFT_POSI_0;               /* 初期位置 */
     }
     else if( ( gpio_g_paddle_shift_sw.u8_state == LOW ) &&
-        ( gpio_g_paddle_shift_sw.u8_state_bf == MID ))
+             ( gpio_g_paddle_shift_sw.u8_state_bf == MID ))
     { /* シフトアップ */
         if( u8_shift_g_shift_position_req < SHIFT_POSI_7 )
         {
@@ -370,7 +370,7 @@ static void func_shift_s_shift_position_decide_mode_automatic( void )
     /* 変速発生時の処理 */
     if( u8_shift_position_req_before != u8_shift_g_shift_position_req )
     { /* シフト位置の更新があった */
-        u16_shift_s_auto_position_cnt = (u16);
+        u16_shift_s_auto_position_cnt = (u16)0;
     }
 }
 
@@ -387,22 +387,35 @@ static void func_shift_s_shifting_control( void )
         u8_shift_g_shift_position_output = u8_shift_g_shift_position_req;       /* 変速状態を直ちに反映 */
         u8_shift_s_posision_reset_req = CLEAR;                                  /* 要求クリア */
     }
-    if( u8_shift_g_shifting_sequence == SHIFT_SEQ_CLUTCH_OFF_SHIFT_CHG )
-    { /* 変速シーケンス内 / ブリッピング完了 */
-        if( u8_shift_g_blip_complete == SET )
-        { /* 変速シーケンスにきてブリッピング完了している */
-            u8_shift_g_shift_position_output = u8_shift_g_shift_position_req;
-            u8_shift_s_shifting_complete = SET;                 /* 変速完了 */
+    
+    if( u8_shift_s_shift_mode_req == SHIFT_MODE_MANUAL )
+    { /* マニュアル変速モード */
+        u8_shift_g_shift_position_output = u8_shift_g_shift_position_req;       /* 常時反映可能 ※ただしスロットルONの時だけは、一時的にPOSI_0へリセットされるようにした */
+    }
+    else if( u8_shift_s_shift_mode_req == SHIFT_MODE_AUTOMATIC )
+    {
+        if( u8_shift_g_shifting_sequence == SHIFT_SEQ_CLUTCH_OFF_SHIFT_CHG )
+        { /* 変速シーケンス内 / ブリッピング完了 */
+            if( u8_shift_g_blip_complete == SET )
+            { /* 変速シーケンスにきてブリッピング完了している */
+                u8_shift_g_shift_position_output = u8_shift_g_shift_position_req;
+                u8_shift_s_shifting_complete = SET;                 /* 変速完了 */
+            }
+            else
+            {
+                u8_shift_s_shifting_complete = CLEAR;               /* 変速完了 */
+            }
         }
         else
         {
-            u8_shift_s_shifting_complete = CLEAR;               /* 変速完了 */
+            u8_shift_s_shifting_complete = CLEAR;           /* ひとまず変速なしの時は検完了扱い(使ってない) */
         }
     }
     else
     {
-        u8_shift_s_shifting_complete = CLEAR;           /* ひとまず変速なしの時は検完了扱い(使ってない) */
+        ;
     }
+
 
     /* 0bit目 */
     if( ( u8_shift_g_shift_position_output & ((u8)0x01) ) != (u8)0 )
@@ -489,121 +502,121 @@ static void func_shift_s_shift_sequence( void )
     /* シーケンス管理 */
     switch ( u8_shift_g_shifting_sequence )
     {
-    case SHIFT_SEQ_CLUTCH_OFF_STOP:
-        if( u8_sc_s_throttle_dir != SC_THROTTLE_DIR_NONE )
-        { /* スロットル中立ではなくなった */
-            u8_shift_g_shifting_sequence = SHIFT_SEQ_CLUTCH_MEETING;                  /* クラッチミート開始 */
+        case SHIFT_SEQ_CLUTCH_OFF_STOP:
+            if( u8_sc_s_throttle_dir != SC_THROTTLE_DIR_NONE )
+            { /* スロットル中立ではなくなった */
+                u8_shift_g_shifting_sequence = SHIFT_SEQ_CLUTCH_MEETING;                  /* クラッチミート開始 */
 
-            if( u8_shift_g_shift_position_req != SHIFT_POSI_0 )
-            {
-                u8_shift_s_posision_reset_req = SET;                /* 初期位置に戻してから動作開始させる */
+                if( u8_shift_g_shift_position_req != SHIFT_POSI_0 )
+                {
+                    u8_shift_s_posision_reset_req = SET;                /* 初期位置に戻してから動作開始させる */
+                }
             }
-        }
-        else if( u8_shift_g_shift_position_output != u8_shift_g_shift_position_req )
-        { /* 停止状態で シフトポジション要求が変化 */
-            u8_shift_g_shifting_sequence = SHIFT_SEQ_CLUTCH_OFF_BFORE_CHG;            /* クラッチOFFへ */
-        }
-        else
-        {
-            ;       /* 待機 */
-        }
-        break;
-
-    case SHIFT_SEQ_CLUTCH_MEETING:
-        /* 始動時のクラッチミート */
-        if( u8_shift_s_clutch_meet_complete == SET )
-        { /* 半クラッチ完了 */
-            u8_shift_g_shifting_sequence = SHIFT_SEQ_CLUTCH_ON_DRIVE;
-        }
-        break;
-    
-    case SHIFT_SEQ_CLUTCH_ON_DRIVE:
-        u16_shift_s_clutch_off_cnt = (u16)0;
-
-        /* 駆動中は常時変速許可 */
-        if( u8_shift_g_shift_position_output != u8_shift_g_shift_position_req )
-        { /* シフトポジション要求が変化 */
-            u8_shift_g_shifting_sequence = SHIFT_SEQ_CLUTCH_OFF_BFORE_CHG;            /* クラッチOFFへ */
-        }
-
-        if( u16_speedsens_g_speed_ave_1stgear == (u16)0 )
-        { /* 車が完全に停止した */
-            u8_shift_g_shifting_sequence = SHIFT_SEQ_CLUTCH_OFF_STOP;             /* クラッチ切る */
-        }
-#if 0
-        /* クラッチキック要求 */
-        else if(  )
-        {
-            u8_shift_s_shifting_status = SHIFT_SEQ_CLUTCH_OFF_KICK;            /* クラッチOFFへ */
-        }
-#endif
-        break;
-    
-    case SHIFT_SEQ_CLUTCH_OFF_BFORE_CHG:
-        /* シフトチェンジ前のクラッチOFF */
-        if( u16_shift_s_clutch_off_cnt < U16_MAX )
-        {
-            u16_shift_s_clutch_off_cnt++;
-        }
-
-        if( u16_shift_s_clutch_off_cnt > SHIFT_CLUTCH_OFF_TIME )
-        { /* クラッチOFFを最低維持する時間経過：サーボの動作応答を待つ */
-            u8_shift_g_shifting_sequence = SHIFT_SEQ_CLUTCH_OFF_SHIFT_CHG;
-            u16_shift_s_clutch_off_cnt = (u16)0;
-        }
-        break;
-
-    case SHIFT_SEQ_CLUTCH_OFF_SHIFT_CHG:
-        /* シフトチェンジ */
-        /*u8_shift_g_shift_position_output = u8_shift_g_shift_position_req;*/       /* シフト要求を反映 */      /* func_shift_s_shifting_control() 側で制御 */
-        u8_shift_g_shifting_sequence = SHIFT_SEQ_CLUTCH_OFF_AFTER_CHG;
-        break;
-
-    case SHIFT_SEQ_CLUTCH_OFF_AFTER_CHG:
-        /* シフトチェンジ後のクラッチOFF */
-        if( u16_shift_s_clutch_off_cnt < U16_MAX )
-        {
-            u16_shift_s_clutch_off_cnt++;
-        }
-        if( u16_shift_s_clutch_off_cnt > SHIFT_CLUTCH_OFF_TIME )
-        { /* クラッチOFFを最低維持する時間経過：変速用サーボの動作応答を待つ */
-            if( ( u8_shift_g_blip_complete == SET ) &&              /* ブリッピング完了 */
-                ( u8_shift_s_shifting_complete == SET ) )           /* 変速完了 */
+            else if( u8_shift_g_shift_position_output != u8_shift_g_shift_position_req )
+            { /* 停止状態で シフトポジション要求が変化 */
+                u8_shift_g_shifting_sequence = SHIFT_SEQ_CLUTCH_OFF_BFORE_CHG;            /* クラッチOFFへ */
+            }
+            else
             {
-                if( u16_speedsens_g_speed_ave_1stgear == (u16)0 )
-                { /* 車が完全に停止した状態での変速だった */
-                    u8_shift_g_shifting_sequence = SHIFT_SEQ_CLUTCH_OFF_STOP;                 /* クラッチ切った状態での停止状態へ戻る */
-                }
-                else if( u16_speedsens_g_speed_ave_1stgear < (u16)1000 )
-                { /* 車が動作中の変速ではあるが、あまり速度が出ていない */
-                    u8_shift_g_shifting_sequence = SHIFT_SEQ_CLUTCH_MEETING;                  /* 半クラッチで繋ぐ */
-                }
-                else
-                { /* 速度が十分に出た状態での変速 */
-                    u8_shift_g_shifting_sequence = SHIFT_SEQ_CLUTCH_ON_DRIVE;                 /* すぐにクラッチ繋ぐ */
-                }
-            
+                ;       /* 待機 */
+            }
+            break;
+
+        case SHIFT_SEQ_CLUTCH_MEETING:
+            /* 始動時のクラッチミート */
+            if( u8_shift_s_clutch_meet_complete == SET )
+            { /* 半クラッチ完了 */
+                u8_shift_g_shifting_sequence = SHIFT_SEQ_CLUTCH_ON_DRIVE;
+            }
+            break;
+        
+        case SHIFT_SEQ_CLUTCH_ON_DRIVE:
+            u16_shift_s_clutch_off_cnt = (u16)0;
+
+            /* 駆動中は常時変速許可 */
+            if( u8_shift_g_shift_position_output != u8_shift_g_shift_position_req )
+            { /* シフトポジション要求が変化 */
+                u8_shift_g_shifting_sequence = SHIFT_SEQ_CLUTCH_OFF_BFORE_CHG;            /* クラッチOFFへ */
+            }
+
+            if( u16_speedsens_g_speed_ave_1stgear == (u16)0 )
+            { /* 車が完全に停止した */
+                u8_shift_g_shifting_sequence = SHIFT_SEQ_CLUTCH_OFF_STOP;             /* クラッチ切る */
+            }
+    #if 0
+            /* クラッチキック要求 */
+            else if(  )
+            {
+                u8_shift_s_shifting_status = SHIFT_SEQ_CLUTCH_OFF_KICK;            /* クラッチOFFへ */
+            }
+    #endif
+            break;
+        
+        case SHIFT_SEQ_CLUTCH_OFF_BFORE_CHG:
+            /* シフトチェンジ前のクラッチOFF */
+            if( u16_shift_s_clutch_off_cnt < U16_MAX )
+            {
+                u16_shift_s_clutch_off_cnt++;
+            }
+
+            if( u16_shift_s_clutch_off_cnt > SHIFT_CLUTCH_OFF_TIME )
+            { /* クラッチOFFを最低維持する時間経過：サーボの動作応答を待つ */
+                u8_shift_g_shifting_sequence = SHIFT_SEQ_CLUTCH_OFF_SHIFT_CHG;
                 u16_shift_s_clutch_off_cnt = (u16)0;
             }
-        }
-        break;
+            break;
 
-    case SHIFT_SEQ_CLUTCH_OFF_KICK:
-        /* 過負荷気味なときのクラッチキック操作 */
-        if( u16_shift_s_clutch_off_cnt < U16_MAX )
-        {
-            u16_shift_s_clutch_off_cnt++;
-        }
-        if( u16_shift_s_clutch_off_cnt > SHIFT_CLUTCH_OFF_TIME_KICK )
-        {
-            u8_shift_g_shifting_sequence = SHIFT_SEQ_CLUTCH_MEETING;
-            u16_shift_s_clutch_off_cnt = (u16)0;
-        }
+        case SHIFT_SEQ_CLUTCH_OFF_SHIFT_CHG:
+            /* シフトチェンジ */
+            /*u8_shift_g_shift_position_output = u8_shift_g_shift_position_req;*/       /* シフト要求を反映 */      /* func_shift_s_shifting_control() 側で制御 */
+            u8_shift_g_shifting_sequence = SHIFT_SEQ_CLUTCH_OFF_AFTER_CHG;
+            break;
 
-        break;
+        case SHIFT_SEQ_CLUTCH_OFF_AFTER_CHG:
+            /* シフトチェンジ後のクラッチOFF */
+            if( u16_shift_s_clutch_off_cnt < U16_MAX )
+            {
+                u16_shift_s_clutch_off_cnt++;
+            }
+            if( u16_shift_s_clutch_off_cnt > SHIFT_CLUTCH_OFF_TIME )
+            { /* クラッチOFFを最低維持する時間経過：変速用サーボの動作応答を待つ */
+                if( ( u8_shift_g_blip_complete == SET ) &&              /* ブリッピング完了 */
+                    ( u8_shift_s_shifting_complete == SET ) )           /* 変速完了 */
+                {
+                    if( u16_speedsens_g_speed_ave_1stgear == (u16)0 )
+                    { /* 車が完全に停止した状態での変速だった */
+                        u8_shift_g_shifting_sequence = SHIFT_SEQ_CLUTCH_OFF_STOP;                 /* クラッチ切った状態での停止状態へ戻る */
+                    }
+                    else if( u16_speedsens_g_speed_ave_1stgear < (u16)1000 )
+                    { /* 車が動作中の変速ではあるが、あまり速度が出ていない */
+                        u8_shift_g_shifting_sequence = SHIFT_SEQ_CLUTCH_MEETING;                  /* 半クラッチで繋ぐ */
+                    }
+                    else
+                    { /* 速度が十分に出た状態での変速 */
+                        u8_shift_g_shifting_sequence = SHIFT_SEQ_CLUTCH_ON_DRIVE;                 /* すぐにクラッチ繋ぐ */
+                    }
+                
+                    u16_shift_s_clutch_off_cnt = (u16)0;
+                }
+            }
+            break;
 
-    default:
-        break;
+        case SHIFT_SEQ_CLUTCH_OFF_KICK:
+            /* 過負荷気味なときのクラッチキック操作 */
+            if( u16_shift_s_clutch_off_cnt < U16_MAX )
+            {
+                u16_shift_s_clutch_off_cnt++;
+            }
+            if( u16_shift_s_clutch_off_cnt > SHIFT_CLUTCH_OFF_TIME_KICK )
+            {
+                u8_shift_g_shifting_sequence = SHIFT_SEQ_CLUTCH_MEETING;
+                u16_shift_s_clutch_off_cnt = (u16)0;
+            }
+
+            break;
+
+        default:
+            break;
     }
 }
 
@@ -749,12 +762,12 @@ static void func_shift_s_clutch_control( void )
             /* 角度基準 ※角度idx基準 */
             if( SHIFT_SERVO_ANGLE_CLUTCH_ON > SHIFT_SERVO_ANGLE_CLUTCH_OFF )
             { /* ONで角度が増える方向 */
-                u8_clutch_meet_angle_idx_diff = SHIFT_SERVO_ANGLE_CLUTCH_ON - SHIFT_SERVO_ANGLE_CLUTCH_OFF;
+                u8_clutch_meet_angle_idx_diff = (u8)( SHIFT_SERVO_ANGLE_CLUTCH_ON - SHIFT_SERVO_ANGLE_CLUTCH_OFF );     /* ここに来る場合は定義された値がCLUTCH_OFFのほうが大きいときなので問題なし */
                 u8_clutch_meet_dir_prop = SET;              /* 比例増加 */
             }
             else
             { /* ONで角度が減る方向 */
-                u8_clutch_meet_angle_idx_diff = SHIFT_SERVO_ANGLE_CLUTCH_OFF - SHIFT_SERVO_ANGLE_CLUTCH_ON;
+                u8_clutch_meet_angle_idx_diff = (u8)( SHIFT_SERVO_ANGLE_CLUTCH_OFF - SHIFT_SERVO_ANGLE_CLUTCH_ON );     /* ここに来る場合は定義された値がCLUTCH_OFFのほうが大きいときなので問題なし */
                 u8_clutch_meet_dir_prop = CLEAR;            /* 比例減少 */
             }
 
@@ -769,7 +782,7 @@ static void func_shift_s_clutch_control( void )
             }
             else
             { /* 時間に比例して角度を下げる */
-                u8_clutch_servo_angle_idx_result = SHIFT_SERVO_ANGLE_CLUTCH_OFF - (u8)u32_calc_buff;
+                u8_clutch_servo_angle_idx_result = SHIFT_SERVO_ANGLE_CLUTCH_OFF - (u8)u32_calc_buff;        /* ここに来る場合は定義された値がCLUTCH_OFFのほうが大きいときなので問題なし */
             }
 
             /* クラッチミート完了判定 */

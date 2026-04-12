@@ -41,6 +41,8 @@
           <itemPath>source/tools/segment.h</itemPath>
           <itemPath>source/tools/speedsens.c</itemPath>
           <itemPath>source/tools/speedsens.h</itemPath>
+          <itemPath>source/tools/inverter.c</itemPath>
+          <itemPath>source/tools/inverter.h</itemPath>
         </logicalFolder>
         <itemPath>source/main.c</itemPath>
         <itemPath>source/main.h</itemPath>

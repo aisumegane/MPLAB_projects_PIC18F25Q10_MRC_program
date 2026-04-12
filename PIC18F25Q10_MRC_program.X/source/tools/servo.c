@@ -10,6 +10,7 @@
 
 
 #include "../mcufunc/timer_driver.h"
+#include "../mcufunc/gpio.h"
 
 #include "servo.h"
 
@@ -17,8 +18,9 @@
 /* ファイル内定義 */
 /* PIC16シリーズは割り算ができない(超遅い)。あらかじめ角度に相当するパルス幅をROM定義して配列参照でパッと呼び出す。 */
 /* ↓↓↓この値を変更する場合は合わせてタイマのクロック、PWM設定を全部見直す */
-#define SERVO_PWM_CNT_MAX            (u16)312U        /* サーボ角度:180度に相当する PWM-dutyカウント数 */   /* func_mset_s_timer2_setup() のコメント参照 */
-#define SERVO_PWM_CNT_MIN            (u16)60U         /* サーボ角度:  0度に相当する PWM-dutyカウント数 */   /* func_mset_s_timer2_setup() のコメント参照 */
+#define SERVO_PWM_CNT_MAX            (u16)295U        /* サーボ角度:180度に相当する PWM-dutyカウント数：2.4ms相当 */    /* 気持ち少なめのカウントを設定 */   /* func_mset_s_timer2_setup() のコメント参照 */
+#define SERVO_PWM_CNT_MIN            (u16)70U         /* サーボ角度:  0度に相当する PWM-dutyカウント数：1.0ms相当 */    /* 気持ち多めのカウントを設定 */     /* func_mset_s_timer2_setup() のコメント参照 */
+/* 注意：パルス幅が最小、最大エリアから外れると、サーボモータがフリーラン動作になって自由に動かせる状態になってしまうので、あまりギリギリ狙いすぎないこと！ */
 
 #define SERVO_ANGLE_MAX              (u16)180U        /* サーボ 最大角度 */
 #define SERVO_ANGLE_MIN              (u16)0U          /* サーボ 最小角度 */
@@ -67,44 +69,55 @@
 /* サーボ角度定義 */
 /* 分解能は5度にした。この程度でも十分に滑らかに角度調節できる。 */
 /* forループ検索したりしても良いかも。 @@要件等 */
-const static u16 u16_servo_s_angle_set_array[ SERVO_ANGLE_NUM ] = 
+static const u16 u16_servo_s_angle_set_array[ SERVO_ANGLE_NUM ] = 
 {
     SERVO_ANGLE___0DEG,
+
     SERVO_ANGLE___5DEG,
     SERVO_ANGLE__10DEG,
     SERVO_ANGLE__15DEG,
     SERVO_ANGLE__20DEG,
     SERVO_ANGLE__25DEG,
+
     SERVO_ANGLE__30DEG,
     SERVO_ANGLE__35DEG,
     SERVO_ANGLE__40DEG,
     SERVO_ANGLE__45DEG,
     SERVO_ANGLE__50DEG,
+
+
     SERVO_ANGLE__55DEG,
     SERVO_ANGLE__60DEG,
     SERVO_ANGLE__65DEG,
     SERVO_ANGLE__70DEG,
     SERVO_ANGLE__75DEG,
+
     SERVO_ANGLE__80DEG,
     SERVO_ANGLE__85DEG,
     SERVO_ANGLE__90DEG,
     SERVO_ANGLE__95DEG,
     SERVO_ANGLE__100DEG,
+
+
     SERVO_ANGLE__105DEG,
     SERVO_ANGLE__110DEG,
     SERVO_ANGLE__115DEG,
     SERVO_ANGLE__120DEG,
     SERVO_ANGLE__125DEG,
+
     SERVO_ANGLE__130DEG,
     SERVO_ANGLE__135DEG,
     SERVO_ANGLE__140DEG,
     SERVO_ANGLE__145DEG,
     SERVO_ANGLE__150DEG,
+
+
     SERVO_ANGLE__155DEG,
     SERVO_ANGLE__160DEG,
     SERVO_ANGLE__165DEG,
     SERVO_ANGLE__170DEG,
     SERVO_ANGLE__175DEG,
+
     SERVO_ANGLE__180DEG
 };
 
@@ -142,19 +155,25 @@ void servo_s_angle_set( u8 u8_angle_idx, u8 servo_num )
 
     /* この関数内で使用しているCCPモジュールを指定するのはなんとも微妙な感じ・・・ */
     /* @@関数ポインタ化を検討する・・・・ */
-    if( servo_num == SERVO_CLUTCH )
-    {
-        
-    }
-    else
-    {
-        ;       /* ここには来ない予定 */
-    }
-
     switch ( servo_num )
     { /* 例外はじけるように switch文使う */
         case SERVO_CLUTCH:
+
+        /* デバッグ */
+#if 1
+        if( gpio_g_paddle_shift_sw.u8_state == SET )
+        {
+            td_g_pwm3_pwm_duty_set( SERVO_ANGLE___0DEG );
+        }
+        else
+        {
+            td_g_pwm3_pwm_duty_set( SERVO_ANGLE__180DEG );
+        }
+
+#else
             td_g_pwm3_pwm_duty_set( u16_angle_duty );
+#endif
+
             break;
         
         default:

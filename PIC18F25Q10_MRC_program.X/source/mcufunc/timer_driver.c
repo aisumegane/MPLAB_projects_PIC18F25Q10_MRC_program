@@ -75,7 +75,7 @@ void td_g_pwm3_pwm_duty_set( u16 u16_duty )
     
     /* duty更新 */
     PWM3DCH = u8_duty_upper8bit;                /* duty 上位8bit 代入       */
-    PWM3DCH = u8_duty_lower2bit;                /* duty 下位2bit 代入       */
+    PWM3DCL = u8_duty_lower2bit;                /* duty 下位2bit 代入       */
 }
 
 

@@ -387,33 +387,23 @@ static void func_shift_s_shifting_control( void )
         u8_shift_g_shift_position_output = u8_shift_g_shift_position_req;       /* 変速状態を直ちに反映 */
         u8_shift_s_posision_reset_req = CLEAR;                                  /* 要求クリア */
     }
-    
-    if( u8_shift_s_shift_mode_req == SHIFT_MODE_MANUAL )
-    { /* マニュアル変速モード */
-        u8_shift_g_shift_position_output = u8_shift_g_shift_position_req;       /* 常時反映可能 ※ただしスロットルONの時だけは、一時的にPOSI_0へリセットされるようにした */
-    }
-    else if( u8_shift_s_shift_mode_req == SHIFT_MODE_AUTOMATIC )
-    {
-        if( u8_shift_g_shifting_sequence == SHIFT_SEQ_CLUTCH_OFF_SHIFT_CHG )
-        { /* 変速シーケンス内 / ブリッピング完了 */
-            if( u8_shift_g_blip_complete == SET )
-            { /* 変速シーケンスにきてブリッピング完了している */
-                u8_shift_g_shift_position_output = u8_shift_g_shift_position_req;
-                u8_shift_s_shifting_complete = SET;                 /* 変速完了 */
-            }
-            else
-            {
-                u8_shift_s_shifting_complete = CLEAR;               /* 変速完了 */
-            }
+
+
+    if( u8_shift_g_shifting_sequence == SHIFT_SEQ_CLUTCH_OFF_SHIFT_CHG )
+    { /* 変速シーケンス内 / ブリッピング完了 */
+        if( u8_shift_g_blip_complete == SET )
+        { /* 変速シーケンスにきてブリッピング完了している */
+            u8_shift_g_shift_position_output = u8_shift_g_shift_position_req;
+            u8_shift_s_shifting_complete = SET;                 /* 変速完了 */
         }
         else
         {
-            u8_shift_s_shifting_complete = CLEAR;           /* ひとまず変速なしの時は検完了扱い(使ってない) */
+            u8_shift_s_shifting_complete = CLEAR;               /* 変速完了 */
         }
     }
     else
     {
-        ;
+        u8_shift_s_shifting_complete = CLEAR;           /* ひとまず変速なしの時は検完了扱い(使ってない) */
     }
 
 
@@ -700,7 +690,7 @@ static void func_shift_s_blip_control( void )
         }
         else
         { /* ブリッピングできていなくても、変速完了させる */
-            //u8_blip_cmp = SET;        /* デバッグ時は一時無効化 */
+            u8_blip_cmp = SET;        /* @@デバッグ時は一時無効化したほうがよさそう */
         }
     }
     else

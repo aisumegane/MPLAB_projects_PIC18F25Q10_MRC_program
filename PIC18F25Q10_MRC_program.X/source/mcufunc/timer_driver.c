@@ -79,6 +79,34 @@ void td_g_pwm3_pwm_duty_set( u16 u16_duty )
 }
 
 
+/**************************************************************/
+/*  Function:                                                 */
+/*  CWG1 Full-Bridge モード 動作方向設定関数                    */
+/**************************************************************/
+void td_g_cwg1_mode_full_bridge_dir_set( u8 u8_dir_req )
+{
+    u8 u8_data_buff;
+    
+    u8_data_buff = CWG1CON0;
+    u8_data_buff &= (u8)0x08;       /* MODE<2:0> ビットクリア */
+    
+    if( u8_dir_req == FORWARD )
+    {
+        u8_data_buff += (u8)0x02;       /* 0b010 */
+    }
+    else if( u8_dir_req == BACKWARD )
+    {
+        u8_data_buff += (u8)0x03;       /* 0b011 */
+    }
+    else
+    {
+        u8_data_buff += (u8)0x02;       /* 0b010 */     /* ひとまず正転*/
+    }
+    
+    /* レジスタ更新 */
+    CWG1CON0 = u8_data_buff;    
+}
+
 
 
 #if ( UNUSED_FUNCTION_HIDE_SETTING == SET )

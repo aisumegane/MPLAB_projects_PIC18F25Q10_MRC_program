@@ -12,10 +12,6 @@
 extern "C" {
 #endif
 
-#define TIMER_INVERTER_DUTY_MAX_CNT             ((u16)2000)
-#define TIMER_INVERTER_DUTY_0P                  ((u16)(0))
-#define TIMER_INVERTER_DUTY_1P                  ((u16)(0))
-#define TIMER_INVERTER_DUTY_5P                  ((u16)(0))
 
 
 /* タイマ5 */
@@ -30,6 +26,8 @@ extern u16 func_mset_g_timer5_read( void );
 /* PWM機能 */
 extern void td_g_pwm3_pwm_duty_set( u16 u16_duty );
 
+/* CWG機能 */
+extern void td_g_cwg1_mode_full_bridge_dir_set( u8 u8_dir_req );
 
 
 /* 未使用関数群 */

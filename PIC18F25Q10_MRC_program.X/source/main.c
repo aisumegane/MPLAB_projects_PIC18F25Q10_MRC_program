@@ -93,7 +93,7 @@
 #include "radio_control.h"
 #include "./tools/speedsens.h"
 #include "./speedcontrol.h"
-#include "./tools/inverter.h"
+#include "./tools/hbridge.h"
 
 #include "main.h"
 
@@ -176,13 +176,13 @@ static void func_main_s_loop( void )
     func_speedsens_g_main();    /* 回転数検出 */
 
     /* 計算処理 */
-    func_speedcontrol_g_main(); /* 速度調整処理 */
     func_shift_g_main();        /* シフトチェンジ処理 */
+    func_speedcontrol_g_main(); /* 速度調整処理 */
     
     /* 出力処理 */
     func_dac_g_main();          /* DAC出力処理 */
     func_indicate_g_main();     /* 表示処理 */
-    func_inverter_g_main();     /* インバータ制御処理 */
+    func_hbridge_g_main();     /* インバータ制御処理 */
 
     GPIO_OUT_DEBUG = CLEAR;
 }

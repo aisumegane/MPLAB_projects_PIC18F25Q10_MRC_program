@@ -17,6 +17,7 @@
 #include "./tools/speedsens.h"
 #include "./mcufunc/timer_driver.h"
 #include "shift.h"
+#include "./tools/hbridge.h"
 
 #include "speedcontrol.h"
 
@@ -31,15 +32,14 @@
 
 
 /* ※そもそもプロポからのduty更新指令が50ms間隔でしか送れないので、若干意味がない設定。何もしなくても緩やかに変化してくれる？ */
-#define SC_CONST_DUTY_CTRL_UPDATE_CYCLE ((u8)20)                /* 10msに1回更新 例:1%-20ms -> 100%-2000ms  */
-#define SC_CONST_DUTY_CTRL_INC          TIMER_INVERTER_DUTY_1P  /* 一定duty制御での加速量 */
-#define SC_CONST_DUTY_CTRL_DEC          TIMER_INVERTER_DUTY_1P  /* 一定duty制御での減速量 */
+#define SC_CONST_DUTY_CTRL_UPDATE_CYCLE ((u8)20)                /* Xmsに1回更新 例:1%-20ms -> 100%-2000ms  */
+#define SC_CONST_DUTY_CTRL_INC          INV_DUTY_1P             /* 一定duty制御での加速量 */
+#define SC_CONST_DUTY_CTRL_DEC          INV_DUTY_1P             /* 一定duty制御での減速量 */
 
 u8 u8_sc_s_throttle_dir;
 u8 u8_sc_s_throttle_dir_before;
 u8 u8_sc_g_throttle_rc_ch_duty_target;        /* 目標duty */
 u8 u8_sc_g_throttle_duty_ref;           /* 指令duty */
-u16 u16_sc_s_throttle_inv_duty_output;      /* インバータへの出力duty */        /* 回転数制御でも使うので、0~100だとちょっと精度が足りない。->RC_DUTYとは別のdutyを定義する */
 
 
 /* duty制御 */
@@ -68,7 +68,6 @@ void func_speedcontrol_g_init( void )
 
     u8_sc_g_throttle_rc_ch_duty_target = RC_CH_DUTY_0P;
     u8_sc_g_throttle_duty_ref    = RC_CH_DUTY_0P;
-    u16_sc_s_throttle_inv_duty_output = RC_CH_DUTY_0P;
 
     u8_sc_s_duty_update_cycle_cnt = (u8)0;
     s16_sc_s_integral_cnt = (s16)0;
@@ -86,10 +85,7 @@ void func_speedcontrol_g_main( void )
     /* グローバル変数更新 */
     u8_sc_s_throttle_dir_before = u8_sc_s_throttle_dir;             /* 前回のストットルの方向を保存しておく */                      /* やっぱポインタ引数の関数やめたほうがいいかも・・・グローバル変数を多用するソフトの構成上、あまりきれいに書けない */
     func_sc_s_throttle_per_dir_update( &u8_sc_g_throttle_rc_ch_duty_target ,&u8_sc_s_throttle_dir );     /* dutyをスロットル中心が0になるように再計算 */
-    func_sc_s_output_duty_update( &u16_sc_s_throttle_inv_duty_output );                                  /* 出力duty更新       */
-
-
-    //func_sc_s_speed_output( u16_sc_s_throttle_inv_duty_output );                                         /* 出力制御           */
+    func_sc_s_output_duty_update( &u16_hbridge_g_duty_output_request );                                  /* 出力duty更新       */
 }
 
 
@@ -253,7 +249,7 @@ static u16 func_sc_s_duty_ctrl( u8 u8_rc_ch_duty_target, u16 u16_duty_now )
     /* 回転数制御でない側は、RCプロポからの入力dutyをそのまま出力dutyとして出力する */
     /* インバータへの出力duty指定は、回転数制御時を考慮して16bitに拡張しているので、 */
     /* スロットルからの入力dutyを、再度スケーリングする必要がある */
-    u32_calc_buff = func_ud_g_calcmul_2x2_byte( (u16)u8_rc_ch_duty_target, (u16)TIMER_INVERTER_DUTY_MAX_CNT );
+    u32_calc_buff = func_ud_g_calcmul_2x2_byte( (u16)u8_rc_ch_duty_target, (u16)INV_DUTY_100P );
     u32_calc_buff = func_ud_g_calcdiv_4x4_byte( u32_calc_buff, (u32)RC_CH_DUTY_100P );
     u16_duty_target = (u16)u32_calc_buff;
 

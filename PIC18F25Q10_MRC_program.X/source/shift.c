@@ -422,6 +422,16 @@ static void func_shift_s_shift_position_control( void )
         u8_shift_s_shifting_complete = CLEAR;           /* ひとまず変速なしの時は検完了扱い(使ってない) */
     }
 
+    /* ニュートラル出力設定 */
+    if( u8_shift_g_shift_position_output == SHIFT_POSI_0 )
+    { /* 現在 0速 */
+        U8_GPIO_G_OUT_NEUTRAL = SET;        /* 強制ニュートラル信号を出力 */
+    }
+    else
+    {
+        U8_GPIO_G_OUT_NEUTRAL = CLEAR;
+    }
+    
 
     /* 0bit目 */
     if( ( u8_shift_g_shift_position_output & ((u8)0x01) ) != (u8)0 )
@@ -478,7 +488,7 @@ static void func_shift_s_neutral_judge_control( void )
     { /* オートマチックシフト */
         if( u16_speedsens_g_speed_ave_1stgear == (u16)0 )
         { /* ほぼ停止状態 ※シフト位置は0に戻ってるはず... */
-            U8_GPIO_G_OUT_NEUTRAL = CLEAR;              /* ニュートラル状態へ設定 */
+            
         }
     }
     else

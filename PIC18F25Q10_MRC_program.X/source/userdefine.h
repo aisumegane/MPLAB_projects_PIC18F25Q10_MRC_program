@@ -23,11 +23,13 @@ extern "C" {
 #define     OFF     0U
 #define     LOW     0U
 #define     DOWN    0U
+#define     BACKWARD 0U
 
 #define     SET     1U
 #define     ON      1U
 #define     HI      1U
 #define     UP      1U
+#define     FORWARD 1U
 
 #define     MID     3U
 

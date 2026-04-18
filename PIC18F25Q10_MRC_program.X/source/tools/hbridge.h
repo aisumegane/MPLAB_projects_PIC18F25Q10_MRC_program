@@ -55,8 +55,9 @@ extern "C" {
 
 extern void func_inverter_g_init( void );
 extern void func_hbridge_g_main( void );
+extern void func_hbridge_control_set( u8_state_req, u8_duty_req );
 
-
+extern u8 u8_hbridge_g_output_state_request;
 extern u16 u16_hbridge_g_duty_output_request;
 
 #ifdef	__cplusplus

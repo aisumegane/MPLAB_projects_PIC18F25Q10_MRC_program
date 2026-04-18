@@ -25,6 +25,7 @@ extern u16 func_mset_g_timer5_read( void );
 
 /* PWM機能 */
 extern void td_g_pwm3_pwm_duty_set( u16 u16_duty );
+extern void td_g_pwm4_pwm_duty_set( u16 u16_duty );
 
 /* CWG機能 */
 extern void td_g_cwg1_mode_full_bridge_dir_set( u8 u8_dir_req );

@@ -83,9 +83,16 @@ void func_speedcontrol_g_init( void )
 void func_speedcontrol_g_main( void )
 {
     /* グローバル変数更新 */
+    /* 入力処理 */
     u8_sc_s_throttle_dir_before = u8_sc_s_throttle_dir;             /* 前回のストットルの方向を保存しておく */                      /* やっぱポインタ引数の関数やめたほうがいいかも・・・グローバル変数を多用するソフトの構成上、あまりきれいに書けない */
     func_sc_s_throttle_per_dir_update( &u8_sc_g_throttle_rc_ch_duty_target ,&u8_sc_s_throttle_dir );     /* dutyをスロットル中心が0になるように再計算 */
-    func_sc_s_output_duty_update( &u16_hbridge_g_duty_output_request );                                  /* 出力duty更新       */
+    
+    /* 計算処理 */
+    func_sc_s_output_state_update( &u8_hbridge_g_output_state_request );             /* 車体の動作状態更新 */
+    func_sc_s_output_duty_update( &u16_hbridge_g_duty_output_request );              /* 出力duty更新       */
+    
+    /* 出力処理 */
+    func_hbridge_control_set( u8_hbridge_g_output_state_request, u16_hbridge_g_duty_output_request );
 }
 
 

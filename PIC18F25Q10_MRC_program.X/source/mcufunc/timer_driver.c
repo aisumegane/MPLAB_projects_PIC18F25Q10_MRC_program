@@ -78,6 +78,29 @@ void td_g_pwm3_pwm_duty_set( u16 u16_duty )
     PWM3DCL = u8_duty_lower2bit;                /* duty 下位2bit 代入       */
 }
 
+/**************************************************************/
+/*  Function:                                                 */
+/*  PWM4 PWM モード duty設定関数                               */
+/*  PWM4はCCPから独立してPWM専用となっている                     */
+/**************************************************************/
+void td_g_pwm4_pwm_duty_set( u16 u16_duty )
+{
+    u8 u8_duty_upper8bit;
+    u8 u8_duty_lower2bit;
+
+    /* なんでこんなレジスタ構成なんや。 */
+    /* CCPRxL は10bitのdutyの上位8ビットを指定する */
+    u8_duty_upper8bit = (u8)( u16_duty >> 2U );        /* 0b0011-1111-1111 -> 0b0000-1111-1111-(11) */
+
+    /* DCxB は10bitのdutyの下位2bitを指定する */
+    u16_duty &= (u16)0x0003;                /* 0b0011-1111-1111 -> 0b0000-0000-0011 */ /* 下位2bit以外を削除 */
+    u8_duty_lower2bit = (u8)( u16_duty << 6U );        /* 0b0011-1111-1111 -> 0b0000-0011-0000 */ /* DCxB bitがある<7:6>bit目 まで位置をシフト */
+    
+    /* duty更新 */
+    PWM4DCH = u8_duty_upper8bit;                /* duty 上位8bit 代入       */
+    PWM4DCL = u8_duty_lower2bit;                /* duty 下位2bit 代入       */
+}
+
 
 /**************************************************************/
 /*  Function:                                                 */
@@ -90,11 +113,11 @@ void td_g_cwg1_mode_full_bridge_dir_set( u8 u8_dir_req )
     u8_data_buff = CWG1CON0;
     u8_data_buff &= (u8)0x08;       /* MODE<2:0> ビットクリア */
     
-    if( u8_dir_req == FORWARD )
+    if( u8_dir_req == FORWARD ) /* SET */
     {
         u8_data_buff += (u8)0x02;       /* 0b010 */
     }
-    else if( u8_dir_req == BACKWARD )
+    else if( u8_dir_req == BACKWARD )   /* CLEAR */
     {
         u8_data_buff += (u8)0x03;       /* 0b011 */
     }

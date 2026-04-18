@@ -5,6 +5,10 @@
  * Created on 2020/03/5, 22:26
  */
 
+/* このファイル内で設定する処理は、エンジンとアクセル制御のみ担当 */
+/* アクセル制御の結果、エンジン回転数が所定の域に到達した場合シフトチェンジが必要になるが、 */
+/* これはshift.c側で実施する。 */
+
 #include <xc.h>
 #include "userdefine.h"
 
@@ -21,23 +25,38 @@
 
 #include "speedcontrol.h"
 
+
+/* シーケンス */
+#define SC_DRIVE_STATUS_IDLING          ((u8)0)                /* スロットルオフ中 */
+#define SC_DRIVE_STATUS_DRIVE_CW        ((u8)1)                /* 駆動中CW  */
+#define SC_DRIVE_STATUS_DRIVE_CCW       ((u8)2)                /* 駆動中CCW */
+#define SC_DRIVE_STATUS_BRAKE_CW        ((u8)3)                /* ブレーキCW  */
+#define SC_DRIVE_STATUS_BRAKE_CCW       ((u8)4)                /* ブレーキCCW */
+
+
 /* パラメータ */
 #define SC_THROTTLE_DEFINE_0P           RC_CH_DUTY_50P          /* スロットル中立時の入力 */
 #define SC_THROTTLE_HYSTERESIS          RC_CH_DUTY_5P           /* スロットル操作のヒステリシス */
-#define SC_IDLING_DUTY                  RC_CH_DUTY_10P          /* アイドリング中のduty */
-#define SC_CLUTCH_MEETING_DUTY          RC_CH_DUTY_20P          /* クラッチミート中のduty */
+#define SC_IDLING_DUTY                  HBRIDGE_DUTY_10P        /* アイドリング中のduty */
 
 #define SC_RPM_CTRL_GAIN_P_DIV2N        ((u8)6)                 /* Pゲイン 割り算形式で実装　※大きくするほど変化が緩やかになる */
 #define SC_RPM_CTRL_GAIN_I_DIV2N        ((u8)6)                 /* Iゲイン 割り算形式で実装　※大きくするほど変化が緩やかになる */   /* @@大きすぎる(割り算しすぎ)だと、i項がs16の範囲を外れてしまうので注意。飽和状態で32767は超えない設計にすること！！！！ */
 
+#define SC_THROTTLE_DIR_RESET_TIME      ((u8)100)               /* スロットル中立 遷移待機カウント */
+
 
 /* ※そもそもプロポからのduty更新指令が50ms間隔でしか送れないので、若干意味がない設定。何もしなくても緩やかに変化してくれる？ */
 #define SC_CONST_DUTY_CTRL_UPDATE_CYCLE ((u8)20)                /* Xmsに1回更新 例:1%-20ms -> 100%-2000ms  */
-#define SC_CONST_DUTY_CTRL_INC          INV_DUTY_1P             /* 一定duty制御での加速量 */
-#define SC_CONST_DUTY_CTRL_DEC          INV_DUTY_1P             /* 一定duty制御での減速量 */
+#define SC_CONST_DUTY_CTRL_INC          HBRIDGE_DUTY_1P         /* 一定duty制御での加速量 */
+#define SC_CONST_DUTY_CTRL_DEC          HBRIDGE_DUTY_1P         /* 一定duty制御での減速量 */
 
+
+u8 u8_sc_s_drive_status;
+
+u8 u8_sc_s_throttle_dir_reset_cnt;      
 u8 u8_sc_s_throttle_dir;
 u8 u8_sc_s_throttle_dir_before;
+u8 u8_sc_s_throttle_dir_1state_before;
 u8 u8_sc_g_throttle_rc_ch_duty_target;        /* 目標duty */
 u8 u8_sc_g_throttle_duty_ref;           /* 指令duty */
 
@@ -51,11 +70,13 @@ s16 s16_sc_s_integral_cnt;
 
 
 /* プロトタイプ宣言 */
-static void func_sc_s_throttle_per_dir_update( u8 *u8_per, u8 *u8_dir );
+static void func_sc_s_throttle_per_dir_update( void );
 static void func_sc_s_throttle_threshold_update( u8 *u8_forward_th, u8 *u8_backward_th );
-static void func_sc_s_output_duty_update( u16 *u16_duty_output );
-static u16 func_sc_s_duty_ctrl( u8 u8_duty_target, u16 u16_duty_now );
+static void func_sc_s_drive_status_update( void);
+static void func_sc_s_calc_duty( void );
+static u16 func_sc_s_const_duty_ctrl( u8 u8_duty_target, u16 u16_duty_now );
 static u16 func_sc_s_rpm_pi_ctrl( u16 u16_speed_target, u16 u16_speed_now, u16 u16_duty_now );
+static void func_sc_s_output_control( void );
 
 /**************************************************************/
 /*  Function:                                                 */
@@ -65,6 +86,7 @@ void func_speedcontrol_g_init( void )
 {
     u8_sc_s_throttle_dir        = SC_THROTTLE_DIR_NONE;
     u8_sc_s_throttle_dir_before = SC_THROTTLE_DIR_NONE;
+    u8_sc_s_throttle_dir_1state_before = SC_THROTTLE_DIR_NONE;
 
     u8_sc_g_throttle_rc_ch_duty_target = RC_CH_DUTY_0P;
     u8_sc_g_throttle_duty_ref    = RC_CH_DUTY_0P;
@@ -82,17 +104,10 @@ void func_speedcontrol_g_init( void )
 /* モジュールの切り分けが微妙かも　センスの問題もある。 */
 void func_speedcontrol_g_main( void )
 {
-    /* グローバル変数更新 */
-    /* 入力処理 */
-    u8_sc_s_throttle_dir_before = u8_sc_s_throttle_dir;             /* 前回のストットルの方向を保存しておく */                      /* やっぱポインタ引数の関数やめたほうがいいかも・・・グローバル変数を多用するソフトの構成上、あまりきれいに書けない */
-    func_sc_s_throttle_per_dir_update( &u8_sc_g_throttle_rc_ch_duty_target ,&u8_sc_s_throttle_dir );     /* dutyをスロットル中心が0になるように再計算 */
-    
-    /* 計算処理 */
-    func_sc_s_output_state_update( &u8_hbridge_g_output_state_request );             /* 車体の動作状態更新 */
-    func_sc_s_output_duty_update( &u16_hbridge_g_duty_output_request );              /* 出力duty更新       */
-    
-    /* 出力処理 */
-    func_hbridge_control_set( u8_hbridge_g_output_state_request, u16_hbridge_g_duty_output_request );
+    func_sc_s_throttle_per_dir_update();     /* dutyをスロットル中心が0になるように再計算 */
+    func_sc_s_drive_status_update();         /* スロットル操作による車体の動作状態指令更新 */
+    func_sc_s_calc_duty();                   /* 出力duty更新       */
+    func_sc_s_output_control();              /* 出力制御 */
 }
 
 
@@ -102,8 +117,10 @@ void func_speedcontrol_g_main( void )
 /*  レバー操作に対して0~100の入力としているため、これを前後に振り分ける */
 /*  分解能的に成立していないところがあるが、実害なのでOKとした     */
 /**************************************************************/
-static void func_sc_s_throttle_per_dir_update( u8 *u8_per, u8 *u8_dir )
+static void func_sc_s_throttle_per_dir_update( void )
 {
+    u8 u8_throttle_per_result;
+    u8 u8_throttle_dir_result;
     u8 u8_duty_input;
     u8 u8_duty_forward_th;
     u8 u8_duty_backward_th;
@@ -113,6 +130,9 @@ static void func_sc_s_throttle_per_dir_update( u8 *u8_per, u8 *u8_dir )
     u32 u32_calc_buff;
 
     /* 初期化 */ 
+    u8_throttle_per_result = (u8)0;
+    u8_throttle_dir_result = SC_THROTTLE_DIR_CW;
+
     u8_duty_input = (u8)0;
     u8_duty_forward_th = (u8)0;
     u8_duty_backward_th = (u8)0;
@@ -122,6 +142,7 @@ static void func_sc_s_throttle_per_dir_update( u8 *u8_per, u8 *u8_dir )
     /*-----------------------------------------------------------------------*/
 
     u8_duty_input = u8_rc_g_ch_duty_tbl[RC_DUTY_CH_THROTTLE];
+    u8_sc_s_throttle_dir_before = u8_sc_s_throttle_dir;                 /* 前回のスロットル設定方向を保存 */
 
     /* スロットル閾値更新 */
     func_sc_s_throttle_threshold_update( &u8_duty_forward_th, &u8_duty_backward_th );
@@ -136,8 +157,10 @@ static void func_sc_s_throttle_per_dir_update( u8 *u8_per, u8 *u8_dir )
         u32_calc_buff = func_ud_g_calcmul_2x2_byte( (u16)u8_duty_recalc_gap, (u16)RC_CH_DUTY_100P );
         u32_calc_buff = func_ud_g_calcdiv_4x4_byte( u32_calc_buff, (u32)u8_duty_recalc_base );
 
-        *u8_per = (u8)u32_calc_buff;            /* 前進方向のduty(再計算後)を設定 */
-        *u8_dir = SC_THROTTLE_DIR_FORWARD;      /* 前進 */
+        u8_throttle_per_result = (u8)u32_calc_buff;            /* 前進方向のduty(再計算後)を設定 */
+        u8_throttle_dir_result = SC_THROTTLE_DIR_CW;      /* 前進 */
+
+        u8_sc_s_throttle_dir_reset_cnt = (u8)0;                /* 中立以降カウント クリア */
     }
     else if( u8_duty_input < u8_duty_backward_th )
     { /* 後退方向のduty入力 */
@@ -147,13 +170,35 @@ static void func_sc_s_throttle_per_dir_update( u8 *u8_per, u8 *u8_dir )
         u32_calc_buff = func_ud_g_calcmul_2x2_byte( (u16)u8_duty_recalc_gap, (u16)RC_CH_DUTY_100P );
         u32_calc_buff = func_ud_g_calcdiv_4x4_byte( u32_calc_buff, (u32)u8_duty_recalc_base );
 
-        *u8_per = (u8)u32_calc_buff;            /* 後進方向のduty(再計算後)を設定 */
-        *u8_dir = SC_THROTTLE_DIR_BACKWARD;     /* 後進 */
+        u8_throttle_per_result = (u8)u32_calc_buff;            /* 後進方向のduty(再計算後)を設定 */
+        u8_throttle_dir_result = SC_THROTTLE_DIR_CCW;     /* 後進 */
+
+        u8_sc_s_throttle_dir_reset_cnt = (u8)0;                /* 中立以降カウント クリア */
     }
     else
     { /* 中立状態 */
-        *u8_per = RC_CH_DUTY_0P;                /* リモコンのオフセット設定に依存して中心がずれちゃうっぽい。あとT8FBの可変抵抗がBカーブになっているような雰囲気あり？？？ */
-        *u8_dir = SC_THROTTLE_DIR_NONE;
+        u8_throttle_per_result = RC_CH_DUTY_0P;                /* リモコンのオフセット設定に依存して中心がずれちゃうっぽい。あとT8FBの可変抵抗がBカーブになっているような雰囲気あり？？？ */
+
+        if( u8_sc_s_throttle_dir_reset_cnt < U8_MAX )
+        {
+            u8_sc_s_throttle_dir_reset_cnt++;
+        }
+
+        if( u8_sc_s_throttle_dir_reset_cnt > SC_THROTTLE_DIR_RESET_TIME )
+        { /* 中立への復帰にはdelayを設ける ※ブレーキ判定のため */
+            u8_throttle_dir_result = SC_THROTTLE_DIR_NONE;      /* 時間内に B->F or F->B へ切り替えた場合、中立を経過せずに切り替わる */
+        }
+    }
+
+    /*==================*/
+    /* グローバル変数更新 */
+    /*==================*/
+    u8_sc_g_throttle_rc_ch_duty_target = u8_throttle_per_result;
+    u8_sc_s_throttle_dir = u8_throttle_dir_result;
+
+    if( u8_sc_s_throttle_dir != u8_sc_s_throttle_dir_before )
+    { /* 前回の"ステート"保存 */
+        u8_sc_s_throttle_dir_1state_before = u8_sc_s_throttle_dir_before;       /* 次の1ms以降もこの値は保持される。 */
     }
 }
 
@@ -181,53 +226,65 @@ static void func_sc_s_throttle_threshold_update( u8 *u8_forward_th, u8 *u8_backw
     }
 }
 
+/**************************************************************/
+/*  Function:                                                 */
+/*   */
+/**************************************************************/
 
 /**************************************************************/
 /*  Function:                                                 */
-/*  スロットル開口度 調節処理                                   */
+/*  出力duty計算処理                                            */
 /*  一定dutyでの制御と、負荷軸回転数に合わせに行く制御を切り替える  */
 /*  通常変速状態ではduty制御を、変速時のシフトアップ・シフトダウンは */
 /*  負荷軸側回転数を目標値として合わせに行く                      */
 /**************************************************************/
-static void func_sc_s_output_duty_update( u16 *u16_duty_now )
+static void func_sc_s_calc_duty( void )
 {
-    /* 変速シーケンスに依存して出力するdutyが変わってくるので、switch文にしてみた */
-
+    u16 u16_duty_now;
     u16 u16_duty_new;
 
     /* 初期化 */
-    u16_duty_new = RC_CH_DUTY_0P;
+    /* 注意：この関数内で扱うdutyはすべてhbridgへの出力duty ※RC-CH-DUTYではない */
+    u16_duty_now = HBRIDGE_DUTY_0P;
+    u16_duty_new = HBRIDGE_DUTY_0P;
 
-    switch ( u8_shift_g_shifting_sequence )
+    /* グローバル変数更新 */
+    u16_duty_now = u16_hbridge_g_output_duty;
+
+    /* 変速シーケンスに依存して出力するdutyが変わってくるので、switch文にしてみた */
+    switch ( u8_sc_s_drive_status )
     {
-        case SHIFT_SEQ_CLUTCH_OFF_STOP:
-            /* 停止中 */
+        case SC_DRIVE_STATUS_IDLING:
             u16_duty_new = SC_IDLING_DUTY;            /* 停止中もアイドリングdutyを出しておく */
             break;
-    
-        case SHIFT_SEQ_CLUTCH_MEETING:
-            u16_duty_new = SC_CLUTCH_MEETING_DUTY;    /* 始動時のクラッチミートdutyはひとまず固定値にしておく */
-            break;
-
-        case SHIFT_SEQ_CLUTCH_ON_DRIVE:
-            /* 一定duty制御領域 */  /* @@この関数はインバータ出力側に移動するのが適切かも */
-            u16_duty_new = func_sc_s_duty_ctrl( u8_sc_g_throttle_rc_ch_duty_target, *u16_duty_now );           /* 狙いのdutyを出したときに回転数が変速閾値超えたなら、勝手に変速するだけ duty制御側は特に何もしない */
-            break;
-
-        case SHIFT_SEQ_CLUTCH_OFF_BFORE_CHG:        /* PIの応答を考えて、最初にクラッチ切った時からPI制御開始する */
-        case SHIFT_SEQ_CLUTCH_OFF_AFTER_CHG:
-        case SHIFT_SEQ_CLUTCH_OFF_SHIFT_CHG:
-            /* 変速中 */
-            u16_duty_new = func_sc_s_rpm_pi_ctrl( u16_speedsens_g_speed_ave_1stgear, u16_speedsens_g_speed_ave_mtr, *u16_duty_now );     /* 回転数追従制御によるduty指令値 */
-            break;
         
+        case SC_DRIVE_STATUS_DRIVE_CW:
+        case SC_DRIVE_STATUS_DRIVE_CCW:
+            if( ( u8_shift_g_shifting_sequence == SHIFT_SEQ_CLUTCH_OFF_BFORE_CHG ) ||
+                ( u8_shift_g_shifting_sequence == SHIFT_SEQ_CLUTCH_OFF_AFTER_CHG ) ||
+                ( u8_shift_g_shifting_sequence == SHIFT_SEQ_CLUTCH_OFF_SHIFT_CHG ) )
+            { /* 変速移行期間 */
+                u16_duty_new = func_sc_s_rpm_pi_ctrl( u16_speedsens_g_speed_ave_1stgear, u16_speedsens_g_speed_ave_mtr, u16_duty_now );     /* 回転数追従制御によるduty指令値 */
+            }
+            else
+            { /*  */
+                u16_duty_new = func_sc_s_const_duty_ctrl( u8_sc_g_throttle_rc_ch_duty_target, u16_duty_now );           /* 狙いのdutyを出したときに回転数が変速閾値超えたなら、勝手に変速するだけ duty制御側は特に何もしない */
+            }
+            break;
+
+        case SC_DRIVE_STATUS_BRAKE_CW:
+        case SC_DRIVE_STATUS_BRAKE_CCW:
+            u16_duty_new = HBRIDGE_DUTY_0P;
+            break;
+    
         default:
-            u16_duty_new = SC_IDLING_DUTY;                /*  */
             break;
     }
 
-    /* 現在の出力dutyを更新 */
-    *u16_duty_now = u16_duty_new;
+    /*===================*/
+    /* グローバル変数更新 */
+    /*===================*/
+    u16_hbridge_g_output_duty = u16_duty_new;
 }
 
 
@@ -238,7 +295,7 @@ static void func_sc_s_output_duty_update( u16 *u16_duty_now )
 /*  急な変化に対しては緩やかに追従させる                         */
 /*  アクセルレスポンスに相当する                                 */
 /**************************************************************/
-static u16 func_sc_s_duty_ctrl( u8 u8_rc_ch_duty_target, u16 u16_duty_now )
+static u16 func_sc_s_const_duty_ctrl( u8 u8_rc_ch_duty_target, u16 u16_duty_now )
 {
     u32 u32_duty_now;
     u32 u32_calc_buff;
@@ -256,7 +313,7 @@ static u16 func_sc_s_duty_ctrl( u8 u8_rc_ch_duty_target, u16 u16_duty_now )
     /* 回転数制御でない側は、RCプロポからの入力dutyをそのまま出力dutyとして出力する */
     /* インバータへの出力duty指定は、回転数制御時を考慮して16bitに拡張しているので、 */
     /* スロットルからの入力dutyを、再度スケーリングする必要がある */
-    u32_calc_buff = func_ud_g_calcmul_2x2_byte( (u16)u8_rc_ch_duty_target, (u16)INV_DUTY_100P );
+    u32_calc_buff = func_ud_g_calcmul_2x2_byte( (u16)u8_rc_ch_duty_target, HBRIDGE_DUTY_100P );
     u32_calc_buff = func_ud_g_calcdiv_4x4_byte( u32_calc_buff, (u32)RC_CH_DUTY_100P );
     u16_duty_target = (u16)u32_calc_buff;
 
@@ -441,6 +498,160 @@ static u16 func_sc_s_rpm_pi_ctrl( u16 u16_speed_target, u16 u16_speed_now, u16 u
 }
 
 
+/**************************************************************/
+/*  Function:                                                 */
+/*  出力制御                                                   */
+/**************************************************************/
+static void func_sc_s_output_control( void )
+{
+    u8 u8_hbridge_state_req;
+    
+    u8_hbridge_state_req = CLEAR;
+
+    if( ( u8_sc_s_drive_status == SC_DRIVE_STATUS_BRAKE_CW ) || 
+        ( u8_sc_s_drive_status == SC_DRIVE_STATUS_BRAKE_CCW ) )
+    { /* ブレーキ要求あり */
+        u8_hbridge_state_req = HBRIDGE_OUTPUT_BRAKE;
+    }
+    else if( u8_sc_s_drive_status == SC_DRIVE_STATUS_DRIVE_CW )
+    {
+        u8_hbridge_state_req = HBRIDGE_OUTPUT_CW;
+    }
+    else if( u8_sc_s_drive_status == SC_DRIVE_STATUS_DRIVE_CCW )
+    {
+        u8_hbridge_state_req = HBRIDGE_OUTPUT_CCW;
+    }
+    else if( u8_sc_s_drive_status == SC_DRIVE_STATUS_IDLING )
+    { /* 空ぶかし方向は前回までのスロットル操作方向に合わせておく */
+        if( u8_sc_s_throttle_dir_1state_before == SC_THROTTLE_DIR_CW )
+        {
+            u8_hbridge_state_req = HBRIDGE_OUTPUT_CW;
+        }
+        else if( u8_sc_s_throttle_dir_1state_before == SC_THROTTLE_DIR_CCW )
+        {
+            u8_hbridge_state_req = HBRIDGE_OUTPUT_CCW;
+        }
+        else
+        { /* 一度もスロットル操作がない初期状態 */
+            u8_hbridge_state_req = HBRIDGE_OUTPUT_CW;       /* ひとまず前進方向でアイドリング・・・・ */
+        }
+    }
+    else
+    {
+        ;
+    }
+
+    /* Hブリッジ回路への出力要求 */
+    /* dutyはそのまま設定する */
+    func_hbridge_control_set( u8_hbridge_state_req, u16_hbridge_g_output_duty );
+}
+
+/**************************************************************/
+/*  Function:                                                 */
+/*  動作方向アップデート                                        */
+/*  スロットルレバーの操作から、ラジコン本体の動作状態を確定する    */
+/*  タミヤのラジコンあたりに入っている仕様を踏襲してみた           */
+/**************************************************************/
+static void func_sc_s_drive_status_update( void )
+{
+    switch ( u8_sc_s_drive_status )
+    {
+    case SC_DRIVE_STATUS_IDLING:
+        if( u8_sc_s_throttle_dir == SC_THROTTLE_DIR_CW )
+        {
+            u8_sc_s_drive_status = SC_DRIVE_STATUS_DRIVE_CW;
+        }
+        else if( u8_sc_s_throttle_dir == SC_THROTTLE_DIR_CCW )
+        {
+            u8_sc_s_drive_status = SC_DRIVE_STATUS_DRIVE_CCW;
+        }
+        else
+        {
+            ;
+        }
+        /* ※中立からのブレーキ発生はできない仕様としておく */
+        break;
+
+    case SC_DRIVE_STATUS_DRIVE_CW:
+        if( ( u8_sc_s_throttle_dir        == SC_THROTTLE_DIR_CCW ) &&
+            ( u8_sc_s_throttle_dir_before == SC_THROTTLE_DIR_CW  ) )
+        { /* 前進からのブレーキ */
+            u8_sc_s_drive_status = SC_DRIVE_STATUS_BRAKE_CW;
+        }
+        else if( u8_sc_s_throttle_dir == SC_THROTTLE_DIR_NONE )
+        { /* スロットルオフされた */
+            if( u16_speedsens_g_speed_ave_1stgear <= (u16)0 )
+            { /* 車体が停止状態 */
+                u8_sc_s_drive_status = SC_DRIVE_STATUS_IDLING;
+            }
+            else
+            {
+                ;       /* このシーケンスで待機 */
+            }
+        }
+        else
+        {
+            ;       /* このシーケンスで待機 */
+        }
+        break;
+
+    case SC_DRIVE_STATUS_DRIVE_CCW:
+        if( ( u8_sc_s_throttle_dir        == SC_THROTTLE_DIR_CW ) &&
+            ( u8_sc_s_throttle_dir_before == SC_THROTTLE_DIR_CCW  ) )
+        { /* 前進からのブレーキ */
+            u8_sc_s_drive_status = SC_DRIVE_STATUS_BRAKE_CCW;
+        }
+        else if( u8_sc_s_throttle_dir == SC_THROTTLE_DIR_NONE )
+        { /* スロットルオフされた */
+            if( u16_speedsens_g_speed_ave_1stgear <= (u16)0 )
+            { /* 車体が停止状態 */
+                u8_sc_s_drive_status = SC_DRIVE_STATUS_IDLING;
+            }
+            else
+            {
+                ;       /* このシーケンスで待機 */
+            }
+        }
+        else
+        {
+            ;       /* このシーケンスで待機 */
+        }
+        break;
+
+    case SC_DRIVE_STATUS_BRAKE_CW:
+        if( u8_sc_s_throttle_dir == SC_THROTTLE_DIR_CW )
+        { /* ブレーキキャンセル */
+            u8_sc_s_drive_status = SC_DRIVE_STATUS_DRIVE_CW;       /* 駆動状態に戻る */
+        }
+        else if( u8_sc_s_throttle_dir == SC_THROTTLE_DIR_NONE )
+        {
+            u8_sc_s_drive_status = SC_DRIVE_STATUS_IDLING;
+        }
+        else
+        {
+            ;       /* ここで待機 */
+        }
+        break;
+    
+    case SC_DRIVE_STATUS_BRAKE_CCW:
+        if( u8_sc_s_throttle_dir == SC_THROTTLE_DIR_CCW )
+        { /* ブレーキキャンセル */
+            u8_sc_s_drive_status = SC_DRIVE_STATUS_DRIVE_CCW;       /* 駆動状態に戻る */
+        }
+        else if( u8_sc_s_throttle_dir == SC_THROTTLE_DIR_NONE )
+        {
+            u8_sc_s_drive_status = SC_DRIVE_STATUS_IDLING;
+        }
+        else
+        {
+            ;       /* ここで待機 */
+        }
+        break;
+
+    default:
+        break;
+    }
+}
 
 
 

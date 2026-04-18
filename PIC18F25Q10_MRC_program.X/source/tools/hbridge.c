@@ -26,13 +26,13 @@
 #define U16_HBRIDGE_DIR_SET_WAIT             ((u16)1000)
 
 /* 関数プロトタイプ宣言 */
-static void func_inverter_s_duty_area_check( void );
-static void func_inverter_s_h_bridge_dir_set( u8 u8_state_req );
+static u16 func_inverter_s_duty_area_check( u16 u16_duty_req );
+static void func_hbridge_g_h_bridge_dir_set( u8 u8_state_req );
 static void func_inverter_s_h_bridge_duty_update( u16 u16_duty );
 
+
 /* グローバル変数 */
-u8  u8_hbridge_g_output_state_request;          /* 出力状態 (要求) */
-u16 u16_hbridge_g_duty_output_request;          /* 出力duty (要求) */        /* 回転数制御でも使うので、0~100だとちょっと精度が足りない。->RC_DUTYとは別のdutyを定義する */
+u16 u16_hbridge_g_output_duty;          /* 出力duty (要求) */        /* 回転数制御でも使うので、0~100だとちょっと精度が足りない。->RC_DUTYとは別のdutyを定義する */
 
 
 /* 静的変数 */
@@ -60,7 +60,7 @@ void func_inverter_g_init( void )
 
     u8_hbridge_s_dir_req = FORWARD;
     u8_hbridge_s_dir_before = FORWARD;
-    u16_hbridge_g_duty_output_request = INV_DUTY_0P;
+    u16_hbridge_g_output_duty = HBRIDGE_DUTY_0P;
     u16_hbridge_s_dir_continue_cnt = (u16)0;
 }
 
@@ -79,10 +79,40 @@ void func_hbridge_g_main( void )            /* やっぱりmain.cからの呼び
 /*  duty更新 外部関数                                          */
 /*                                                            */
 /**************************************************************/
-void func_hbridge_control_set( u8_state_req, u8_duty_req )
+void func_hbridge_control_set( u8 u8_state_req, u16 u16_duty_req )
 {  
-    func_inverter_s_h_bridge_dir_set( u8_state_req );       /* Hブリッジ動作方向設定 ※要求ではなく、シーケンス遷移後の確定方向を返す */
-    func_inverter_s_h_bridge_duty_update( u8_duty_req );       /* Hブリッジduty設定    */
+    func_hbridge_g_h_bridge_dir_set( u8_state_req );          /* Hブリッジ動作方向設定 ※要求ではなく、シーケンス遷移後の確定方向を返す */
+    func_inverter_s_h_bridge_duty_update( u16_duty_req );       /* Hブリッジduty設定    */
+}
+
+/**************************************************************/
+/* Function:                                                  */
+/* Hブリッジ回路の動作方向設定関数                               */
+/**************************************************************/
+static void func_hbridge_g_h_bridge_dir_set( u8 u8_state_req )
+{
+    if( u8_state_req == HBRIDGE_OUTPUT_BRAKE )
+    { /* ブレーキの設定要求 */
+        td_g_cwg1_mode_full_bridge_brake();
+    }
+    else
+    { /* ブレーキ以外の設定要求：駆動要求 */
+        td_g_cwg1_mode_full_bridge_drive_dir_set( u8_state_req );
+    }
+}
+
+
+/**************************************************************/
+/* Function:                                                  */
+/* Hブリッジ回路への出力duty設定関数                             */
+/* 注意：ブレーキ設定中の場合は、CWG変調は受け付けられないのでduty設定は無効化される */
+/**************************************************************/
+static void func_inverter_s_h_bridge_duty_update( u16 u16_duty )
+{
+    u16 u16_output_duty;
+
+    u16_output_duty = func_inverter_s_duty_area_check( u16_duty );
+    td_g_pwm4_pwm_duty_set( u16_output_duty );
 }
 
 /**************************************************************/
@@ -92,13 +122,13 @@ void func_hbridge_control_set( u8_state_req, u8_duty_req )
 /**************************************************************/
 static u16 func_inverter_s_duty_area_check( u16 u16_duty_req )
 {
-    if( u16_duty_req > INV_DUTY_100P )
+    if( u16_duty_req > HBRIDGE_DUTY_100P )
     {
-        u16_duty_req = INV_DUTY_100P;
+        u16_duty_req = HBRIDGE_DUTY_100P;
     }
-    else if( u16_duty_req < INV_DUTY_0P )
+    else if( u16_duty_req < HBRIDGE_DUTY_0P )
     {
-        u16_duty_req = INV_DUTY_0P;
+        u16_duty_req = HBRIDGE_DUTY_0P;
     }
     else
     {
@@ -106,30 +136,5 @@ static u16 func_inverter_s_duty_area_check( u16 u16_duty_req )
     }
     
     return u16_duty_req;
-}
-
-/**************************************************************/
-/* Function:                                                  */
-/* Hブリッジ回路の動作方向設定関数                               */
-/**************************************************************/
-static void func_inverter_s_h_bridge_dir_set( u8 u8_state_req )
-{
-
-    /*  動作状態設定   */
-
-    /* タイマ設定切り替え以外不要 */
-    td_g_cwg1_mode_full_bridge_dir_set( u8_state_req );
-}
-
-
-/**************************************************************/
-/* Function:                                                  */
-/* Hブリッジ回路への出力duty設定関数                             */
-/**************************************************************/
-static u8 func_inverter_s_h_bridge_duty_update( u16 u16_duty )
-{
-    u16 u16_output_duty;
-    u16_output_duty = func_inverter_s_duty_area_check( u16_duty );
-    td_g_pwm4_pwm_duty_set( u16_output_duty );
 }
 

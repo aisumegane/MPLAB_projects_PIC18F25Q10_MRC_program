@@ -17,6 +17,8 @@
 #include "./tools/speedsens.h"
 #include "./speedcontrol.h"
 
+
+/* 変速状態定義 */
 #define SHIFT_POSITION_UP                   ((u8)0)
 #define SHIFT_POSITION_DOWN                 ((u8)1)
 #define SHIFT_POSITION_STABLE               ((u8)2)      /* シフト位置 変化なし */
@@ -24,12 +26,12 @@
 #define SHIFT_DRIVE_STOP_CNT                ((u8)10)     /* 10ms */
 #define SHIFT_DRIVE_STOP_SPEED              ((u16)0)     /* 0rpm */
 
-
 /* 時間定義 */
 #define SHIFT_CLUTCH_ON_TO_OFF_WAIT_TIME    ((u16)100)
 #define SHIFT_CLUTCH_OFF_TO_ON_WAIT_TIME    ((u16)50)
 #define SHIFT_CLUTCH_OFF_TIME_KICK          ((u16)200)
 #define SHIFT_CLUTCH_MEET_TIME              ((u16)1000)
+#define SHIFT_CLUTCH_OFF_BY_STOP_TIME       ((u16)400)             /* 車が動いてないときのクラッチオフ(アイドリング移行用) 判断時間 */      /* 速度をどれだけ拾えるかに依存してくる。　ループタスク側で割り込みが何ms置きに来てるかみて低速まで検知できるようにしたほうがよさそう @@ */
 
 /* クラッチ制御用定義 */
 #define SHIFT_SERVO_ANGLE_CLUTCH_ON         SERVO_DEG_IDX__85
@@ -38,11 +40,17 @@
 /* オートマチック変速定義 */
 /* ※メインMCU側では0~7の計8ポジションで指令を送っているため、idxは0始まり... */
 #define SHIFT_POSI_THRESHOLD_NUM            ((u8)8)
+#define SHIFT_AUTOMATIC_START_SHIFT_POSI    SHIFT_POSI_1            /* オートマは1速発進、空ぶかしなし */
 
 /* マニュアル変速定義 */
 #define SHIFT_MANUAL_START_SHIFT_POSI       SHIFT_POSI_0            /* 停止状態から動き出す際のギヤ位置は、初回は空ぶかし可能設定 */
 
 /* ブリッピング制御定義 */
+/* ブリッピングステータス */
+#define SHIFT_BLIP_STATUS_WAITING           ((u8)0)                 /* ブリッピング待機中 */
+#define SHIFT_BLIP_STATUS_COMPLETE_MATCH    ((u8)1)                 /* 回転数一致によりブリッピング完了 */
+#define SHIFT_BLIP_STATUS_COMPLETE_TIMEOUT  ((u8)2)                 /* タイムアウトによりブリッピング完了 */
+/*  */
 #define SHIFT_BLIP_SPEED_ACCURACY           ((u16)100)              /* ブリッピングの正確さ 実写でいうとシフトチェンジのヘタクソ具合 */
 #define SHIFT_BLIP_TIMEOUT                  ((u16)1000)         /*  */
 
@@ -105,7 +113,6 @@ static void func_shift_s_blip_control( void );
 static void func_shift_s_clutch_control( void );
 static void func_shift_s_shift_position_control( void );
 static void func_shift_s_shift_sequence( void );
-static void func_shift_s_neutral_judge_control( void );
 
 static u8 u8_shift_s_shift_chg_enable_wait_cnt;
 static u8 u8_shift_s_shift_mode_req;
@@ -115,13 +122,12 @@ u8 u8_shift_g_shifting_sequence_before;
 static u16 u16_shift_s_clutch_meet_cnt;
 static u8 u8_shift_s_clutch_meet_angle;
 static u8 u8_shift_s_clutch_meet_complete;
-static u8 u8_shift_s_posision_start_reset_req;          /* 始動時のギヤ初期位置リセット要求 */
 
 u8 u8_shift_g_shift_mode;
 u8 u8_shift_g_shift_position_req;
 u8 u8_shift_g_shift_position_output;
 static u8 u8_shift_s_shift_dir;
-u8 u8_shift_g_blip_complete;
+u8 u8_shift_g_blip_complete_status;
 static u8 u8_shift_s_shifting_complete;
 static u16 u16_shift_s_blip_timeout_cnt;
 
@@ -131,6 +137,7 @@ u16 u16_shift_s_clutch_off_cnt;
 static u16 u16_shift_s_auto_position_cnt;
 
 /* パラメータ定義 */
+/* 現在のシフト位置で、duty50%で出せる速度設定 */
 static const u16 u16_shift_s_shift_posi_50per_speed_ary[ SHIFT_POSI_NUM ] =
 {
     SHIFT_POSI_0_APPR_RPM,
@@ -185,11 +192,11 @@ void func_shift_g_init( void )
 
     u16_shift_s_auto_position_cnt = (u16)0;
     u8_shift_s_shift_dir = SHIFT_POSITION_UP;
-    u8_shift_g_blip_complete = SET;
-    u8_shift_s_shifting_complete = SET;
+
+    u8_shift_g_blip_complete_status = SHIFT_BLIP_STATUS_WAITING;
     u16_shift_s_blip_timeout_cnt = (u16)0;
 
-    u8_shift_s_posision_start_reset_req = CLEAR;
+    u8_shift_s_shifting_complete = CLEAR;
 }
 
 /**************************************************************/
@@ -200,9 +207,9 @@ void func_shift_g_init( void )
 /**************************************************************/
 void func_shift_g_main( void )
 {
-    func_shift_s_shift_sequence();              /* 変速シーケンス制御 */        /* エンジン制御はこの処理が主体になるはず。 */
-
     func_shift_s_shift_mode_decide();           /* 変則モード確定処理 */
+
+    func_shift_s_shift_sequence();              /* 変速シーケンス制御 */        /* エンジン制御はこの処理が主体になるはず。 */
     func_shift_s_shift_position_req_decide();   /* シフト位置要求設定処理 */
     func_shift_s_shift_dir_judge();             /* 変速方向判定処理 */
 
@@ -210,7 +217,6 @@ void func_shift_g_main( void )
     func_shift_s_clutch_control();              /* クラッチ制御 */
     func_shift_s_blip_control();                /* ブリッピング制御 */
     func_shift_s_shift_position_control();      /* シフト位置出力制御 */
-    func_shift_s_neutral_judge_control();       /* ニュートラル状態制御 */
 }
 
 /**************************************************************/
@@ -242,20 +248,16 @@ static void func_shift_s_shift_position_req_decide( void )
 /**************************************************************/
 static void func_shift_s_shift_position_decide_mode_manual( void )
 {
-    if( u8_shift_s_posision_start_reset_req == SET )
-    { /* シフト位置リセット要求が発生 */
-        u8_shift_g_shift_position_req = SHIFT_MANUAL_START_SHIFT_POSI;               /* 初期位置：ニュートラルを指定 (空ぶかし許可) */
-    }
-    else if( ( gpio_g_paddle_shift_sw.u8_state == LOW ) &&
+    if( ( gpio_g_paddle_shift_sw.u8_state == LOW ) &&
              ( gpio_g_paddle_shift_sw.u8_state_bf == MID ))
     { /* シフトアップ */
-        if( u8_shift_g_shift_position_req < SHIFT_POSI_8 )
+        if( u8_shift_g_shift_position_req < SHIFT_POSI_MAX )
         {
             u8_shift_g_shift_position_req++;
         }
         else
         {
-            u8_shift_g_shift_position_req = SHIFT_POSI_8;
+            u8_shift_g_shift_position_req = SHIFT_POSI_MAX;
         }
     }
     else if( ( gpio_g_paddle_shift_sw.u8_state == HI ) &&
@@ -295,8 +297,19 @@ static void func_shift_s_shift_position_decide_mode_automatic( void )
     u16 u16_position_rpm_1plus;
 
     u8 u8_shift_position_req_before;
+
+    u8 u8_shift_start_range;
     
     
+    u8_shift_start_range = (u8)0;
+
+
+    
+    GPIO_OUT_DEBUG = SET;
+
+    /* グローバル変数取得 */
+    u8_shift_position_req_before = u8_shift_g_shift_position_req;
+
     /* 変速位置固定カウント */
     /* 変速後は一定時間変速を許可しない */
     if( u16_shift_s_auto_position_cnt < U16_MAX )
@@ -304,8 +317,37 @@ static void func_shift_s_shift_position_decide_mode_automatic( void )
         u16_shift_s_auto_position_cnt++;
     }
     
-    
-    /* 実際には、この関数内で回転数がついてこれなければ、勝手に減速する仕様となる */
+    /* アクセルON/OFF時の動作設定 */
+    /* AT自動車特有の、ある速度域でアクセルON/OFFしても自然に速度がつながる制御の模擬 */
+    /* 現在のスピードエリアを判別する */
+    if( u8_sc_s_throttle_dir == SC_THROTTLE_DIR_NONE )
+    { /* アクセル踏まれてない */
+        u8_shift_g_shift_position_req = SHIFT_POSI_0;               /* エンジンブレーキがないことを再現するため、アクセル踏んでないときはニュートラル状態にする */
+    }
+    else if( ( u8_sc_s_throttle_dir        != SC_THROTTLE_DIR_NONE ) &&
+             ( u8_sc_s_throttle_dir_before == SC_THROTTLE_DIR_NONE ) )
+    { /* 今回がアクセルON初回 */
+        for( u8_shift_start_range = SHIFT_POSI_0; u8_shift_start_range < SHIFT_POSI_MAX; u8_shift_start_range++ )
+        { /* ※8速目は検索から除外、どのみち7速でbreakできなかったら、8速で出てくるため。 */
+            if( u16_speedsens_g_speed_ave_1stgear <= u16_shift_s_shift_posi_50per_speed_ary[ u8_shift_start_range ] )
+            { /* 現在の速度域から、最適な変速開始位置を探す */
+                break;
+            }
+        }
+
+        if( u8_shift_start_range == SHIFT_POSI_0 )
+        { /* 0速 0rpmで停止判定だった */
+            u8_shift_g_shift_position_req = SHIFT_POSI_1;              /* 始動時：1速を返す */
+        }
+        else
+        {
+            u8_shift_g_shift_position_req = u8_shift_start_range;              /* 1~8速を返す */
+        }
+    }
+    else
+    {
+        ;
+    }
 
     /* シフトチェンジのレブリミットレベルを算出する */
     /* ただし、現在のギヤ位置から見て、最大出力で到達できそうな回転数範囲に制限をかける */
@@ -315,19 +357,18 @@ static void func_shift_s_shift_position_decide_mode_automatic( void )
     u32_calc_buff = func_ud_g_calcdiv_4x4_byte( u32_calc_buff, (u32)RC_CH_DUTY_100P );
     u16_shift_thr_speed_his = (u16)u32_calc_buff;
     
-    
     /* シフトチェンジの回転数閾値を計算する */
     if( u8_shift_g_shift_position_output == SHIFT_POSI_1 )
     { /* 現在1速：シフトアップのみ可能 */
         u16_shift_up_thr_speed   = u16_shift_s_shift_posi_50per_speed_ary[ SHIFT_POSI_1 ] + u16_shift_thr_speed_his;
         u16_shift_down_thr_speed = (u16)0;      /* @@ココの値どうしよう... */
     }
-    else if( u8_shift_g_shift_position_output == SHIFT_POSI_7 )
-    { /* 現在7速：シフトダウンのみ可能 */
+    else if( u8_shift_g_shift_position_output == SHIFT_POSI_MAX )
+    { /* 現在8速：シフトダウンのみ可能 */
         u16_shift_up_thr_speed   = U16_MAX;    /* ひとまず変速不可能な回転数にしておく */
-        if( u16_shift_s_shift_posi_50per_speed_ary[ SHIFT_POSI_7 ] > u16_shift_thr_speed_his )
+        if( u16_shift_s_shift_posi_50per_speed_ary[ SHIFT_POSI_MAX ] > u16_shift_thr_speed_his )
         {
-            u16_shift_down_thr_speed = u16_shift_s_shift_posi_50per_speed_ary[ SHIFT_POSI_6 ] - u16_shift_thr_speed_his;
+            u16_shift_down_thr_speed = u16_shift_s_shift_posi_50per_speed_ary[ SHIFT_POSI_MAX - (u8)1 ] - u16_shift_thr_speed_his;
         }
     }
     else
@@ -338,19 +379,19 @@ static void func_shift_s_shift_position_decide_mode_automatic( void )
     
     /* 変速処理 */
     /* 変速要求設定 */
-    u8_shift_position_req_before = u8_shift_g_shift_position_req;
-
     if( u16_shift_s_auto_position_cnt > SHIFT_POSI_REMAIN_CNT )
     { /* 変速後は少し間を置く */
+
+        /* アクセル踏んでいる */
         if( u16_speedsens_g_speed_ave_1stgear >= u16_shift_up_thr_speed )
         { /* シフトアップ閾値回転数を超えた */
-            if( u8_shift_g_shift_position_req < SHIFT_POSI_8 )
+            if( u8_shift_g_shift_position_req < SHIFT_POSI_MAX )
             {
                 u8_shift_g_shift_position_req++;
             }
             else
             {
-                u8_shift_g_shift_position_req = SHIFT_POSI_8;
+                u8_shift_g_shift_position_req = SHIFT_POSI_MAX;
             }
         }
         else if( u16_speedsens_g_speed_ave_1stgear <= u16_shift_down_thr_speed )
@@ -361,7 +402,7 @@ static void func_shift_s_shift_position_decide_mode_automatic( void )
             }
             else
             {
-                u8_shift_g_shift_position_req = SHIFT_POSI_1;
+                u8_shift_g_shift_position_req = SHIFT_POSI_1;               /* ※0速へ戻る判定は、アクセルOFFで行う※ */
             }
         }
         else
@@ -371,23 +412,13 @@ static void func_shift_s_shift_position_decide_mode_automatic( void )
     }
 
 
-    /* 始動時の初期位置設定 */      //とりあえずここに置いておく
-    if( u8_shift_s_posision_start_reset_req == SET )
-    { /* シフト位置リセット要求が発生 */
-        u8_shift_g_shift_position_req = SHIFT_POSI_1;                       /* スロットル入力が発生したら自動で1速へ初期設定 */
-    }
-    else if( ( u8_sc_g_throttle_rc_ch_duty_target == RC_CH_DUTY_0P ) &&     /* 指令入力がない */
-             ( u16_speedsens_g_speed_ave_1stgear == (u16)0 ) )              /* 車体が停止状態 */
-    {
-        u8_shift_g_shift_position_req = SHIFT_POSI_0;
-    }
-
-
     /* 変速発生時の処理 */
     if( u8_shift_position_req_before != u8_shift_g_shift_position_req )
     { /* シフト位置の更新があった */
         u16_shift_s_auto_position_cnt = (u16)0;
     }
+
+    GPIO_OUT_DEBUG = CLEAR;
 }
 
 
@@ -398,23 +429,30 @@ static void func_shift_s_shift_position_decide_mode_automatic( void )
 /**************************************************************/
 static void func_shift_s_shift_position_control( void )
 {
-    if( u8_shift_s_posision_start_reset_req == SET )
+    u8 u8_shift_posi_recalc;
+
+    u8_shift_posi_recalc = SHIFT_POSI_0;
+
+#if 0
+    if( u 8_shift_s_posision_start_reset_req == SET )
     {
         u8_shift_g_shift_position_output = u8_shift_g_shift_position_req;       /* 変速状態を直ちに反映 */
-        u8_shift_s_posision_start_reset_req = CLEAR;                                  /* 要求クリア */
+        u 8_shift_s_posision_start_reset_req = CLEAR;                                  /* 要求クリア */
     }
+#endif
 
 
     if( u8_shift_g_shifting_sequence == SHIFT_SEQ_CLUTCH_OFF_SHIFT_CHG )
-    { /* 変速シーケンス内 / ブリッピング完了 */
-        if( u8_shift_g_blip_complete == SET )
-        { /* 変速シーケンスにきてブリッピング完了している */
+    { /* 変速シーケンス内 / 変速後、クラッチを戻す前のタイミングで変速 */
+        if( ( u8_shift_g_blip_complete_status == SHIFT_BLIP_STATUS_COMPLETE_MATCH   ) ||
+            ( u8_shift_g_blip_complete_status == SHIFT_BLIP_STATUS_COMPLETE_TIMEOUT ) )
+        { /* 変速シーケンスにきて いずれかの方法でブリッピング完了している */
             u8_shift_g_shift_position_output = u8_shift_g_shift_position_req;
             u8_shift_s_shifting_complete = SET;                 /* 変速完了 */
         }
         else
         {
-            u8_shift_s_shifting_complete = CLEAR;               /* 変速完了 */
+            u8_shift_s_shifting_complete = CLEAR;               /* 変速未完了 */
         }
     }
     else
@@ -430,70 +468,40 @@ static void func_shift_s_shift_position_control( void )
     else
     {
         U8_GPIO_G_OUT_NEUTRAL = CLEAR;
-    }
-    
-
-    /* 0bit目 */
-    if( ( u8_shift_g_shift_position_output & ((u8)0x01) ) != (u8)0 )
-    { /* 0bit目が立っている */
-        U8_GPIO_G_OUT_SHIFT_0 = SET;
-    }
-    else
-    {
-        U8_GPIO_G_OUT_SHIFT_0 = CLEAR;
-    }
-
-    /* 1bit目 */
-    if( ( u8_shift_g_shift_position_output & ((u8)0x02) ) != (u8)0 )
-    { /* 0bit目が立っている */
-        U8_GPIO_G_OUT_SHIFT_1 = SET;
-    }
-    else
-    {
-        U8_GPIO_G_OUT_SHIFT_1 = CLEAR;
-    }
-
-    /* 2bit目 */
-    if( ( u8_shift_g_shift_position_output & ((u8)0x04) ) != (u8)0 )
-    { /* 0bit目が立っている */
-        U8_GPIO_G_OUT_SHIFT_2 = SET;
-    }
-    else
-    {
-        U8_GPIO_G_OUT_SHIFT_2 = CLEAR;
-    }
-}
 
 
-/**************************************************************/
-/*  Function:                                                 */
-/*  ニュートラル状態 制御                                       */
-/*  若干特殊な状態なので、変速シーケンス制御とは分ける             */
-/**************************************************************/
-static void func_shift_s_neutral_judge_control( void )
-{
-    if( u8_shift_g_shift_mode == SHIFT_MODE_MANUAL )
-    { /* マニュアルシフト */
-        /* 0速スタートにしたい。ニュートラルを知れて空ぶかしできるようにしておきたい。 */
+        /* 0bit目 */
+        /* 0-7で1を送っている都合上、現在のシフトポジションから１引いて伝える */
+        u8_shift_posi_recalc = u8_shift_g_shift_position_output - (u8)1;
 
-
-
-
-
-
-
-
-    }
-    else if( u8_shift_g_shift_mode == SHIFT_MODE_AUTOMATIC )
-    { /* オートマチックシフト */
-        if( u16_speedsens_g_speed_ave_1stgear == (u16)0 )
-        { /* ほぼ停止状態 ※シフト位置は0に戻ってるはず... */
-            
+        if( ( u8_shift_posi_recalc & ((u8)0x01) ) != (u8)0 )
+        { /* 0bit目が立っている */
+            U8_GPIO_G_OUT_SHIFT_0 = SET;
         }
-    }
-    else
-    {
-        ;
+        else
+        {
+            U8_GPIO_G_OUT_SHIFT_0 = CLEAR;
+        }
+
+        /* 1bit目 */
+        if( ( u8_shift_posi_recalc & ((u8)0x02) ) != (u8)0 )
+        { /* 0bit目が立っている */
+            U8_GPIO_G_OUT_SHIFT_1 = SET;
+        }
+        else
+        {
+            U8_GPIO_G_OUT_SHIFT_1 = CLEAR;
+        }
+
+        /* 2bit目 */
+        if( ( u8_shift_posi_recalc & ((u8)0x04) ) != (u8)0 )
+        { /* 0bit目が立っている */
+            U8_GPIO_G_OUT_SHIFT_2 = SET;
+        }
+        else
+        {
+            U8_GPIO_G_OUT_SHIFT_2 = CLEAR;
+        }
     }
 }
 
@@ -507,14 +515,10 @@ static void func_shift_s_shift_mode_decide( void )
 {
     u8 u8_mode_before;
 
-    u8_mode_before = u8_shift_g_shift_mode;
+    u8_mode_before = u8_shift_g_shift_mode;             /* 現在の設定を一度保存する */
 
-    if( u8_shift_s_shift_chg_enable_wait_cnt < U8_MAX )
-    {
-        u8_shift_s_shift_chg_enable_wait_cnt++;
-    }
     
-    /* 変速モード変更要求 */
+    /* 変速モード 要求値の取得 */
     if( gpio_g_shift_mode_sw.u8_state == HI )
     {
         u8_shift_s_shift_mode_req = SHIFT_MODE_MANUAL;
@@ -525,15 +529,9 @@ static void func_shift_s_shift_mode_decide( void )
     }
 
     /* 停止状態でのみ、シフト操作モードの変更を許可する */
-    if( ( u8_shift_s_shift_chg_enable_wait_cnt >= SHIFT_DRIVE_STOP_CNT ) &&
-        ( u16_speedsens_g_speed_ave_1stgear == SHIFT_DRIVE_STOP_SPEED ) )               /* 1次ギヤで止まってる判定する場合、0,1,2のシフトレバーが接続状態でないとダメなので、条件としては微妙かも */
+    if( u16_speedsens_g_speed_ave_1stgear <= SHIFT_DRIVE_STOP_SPEED )               /* 1次ギヤで止まってる判定する場合、0,1,2のシフトレバーが接続状態でないとダメなので、条件としては微妙かも */
     { /* 現在車は停止している */
         u8_shift_g_shift_mode = u8_shift_s_shift_mode_req;          /* 現在の変速モード要求を反映する */
-    }
-
-    if( u8_mode_before != u8_shift_s_shift_chg_enable_wait_cnt )
-    { /* 変速モードに変化があった */
-        u8_shift_s_shift_chg_enable_wait_cnt = (u8)0;       /* クリア */
     }
 }
 
@@ -553,39 +551,29 @@ static void func_shift_s_shift_sequence( void )
     {
         case SHIFT_SEQ_CLUTCH_OFF_STOP:
             /* 車体が完全に停止状態のときのみ、ここに来ているとして設計 */
-            if( u8_sc_s_throttle_dir != SC_THROTTLE_DIR_NONE )
-            { /* スロットル中立ではなくなった */
-                if( u8_shift_s_shift_mode_req == SHIFT_MODE_AUTOMATIC )
-                { /* 現在オートマ選択中 */
-                    u8_shift_s_posision_start_reset_req = SET;                      /* アクセルONで即始動させる必要があるので、初期変速要求(始動時のギヤ位置を指定する) */
-                    u8_shift_g_shifting_sequence = SHIFT_SEQ_CLUTCH_MEETING;        /* クラッチミート開始 */
-                }
-                else if( u8_shift_s_shift_mode_req == SHIFT_MODE_MANUAL )
-                { /* 現在マニュアル選択中 */
-                    /* 始動時は初期ギヤ位置での発進のみ許可する設計としておく */
-                    if( u8_sc_s_throttle_dir_before == SC_THROTTLE_DIR_NONE )
-                    { /* アクセル踏んだ初回：前回はアクセル踏んでなかった */
-                        if( u8_shift_g_shift_position_req != SHIFT_MANUAL_START_SHIFT_POSI )
-                        { /* シフト位置が初期値と異なる */
-                            u8_shift_s_posision_start_reset_req = SET;                  /* 初回は空ぶかし許可したいので、初期変速要求(始動時のギヤ位置を指定する) */
-                        }
-                    }
-                    else /* (u8_sc_s_throttle_dir!=SC_THROTTLE_DIR_NONE) && (u8_sc_s_throttle_dir_before!=SC_THROTTLE_DIR_NONE) */
-                    { /* アクセルをふかし続けている状態でシフトアップ発生 */
-                        if( u8_shift_g_shift_position_output != u8_shift_g_shift_position_req )
-                        {
-                            u8_shift_g_shifting_sequence = SHIFT_SEQ_CLUTCH_MEETING;        /* クラッチミート開始 */    /* ※ニュートラル状態だけいきなりつなぐような設計は微妙かも、ここだけシーケンス度外視している。 */
-                        }                                                                                               /* @@SHIFT_SEQ_CLUTCH_OFF_AFTER_CHG の内部で、スロットル入力がある状態で変速していたら、MEETING...としたほうがきれいな感じがする。 */
-                    }
+
+            //デバッグ
+            if( u8_shift_g_shift_mode == SHIFT_MODE_AUTOMATIC )
+            { /* 現在オートマ選択中 */
+                if( u8_sc_s_throttle_dir != SC_THROTTLE_DIR_NONE )
+                { /* スロットルONされた */
+                    //u 8_shift_s_posision_start_reset_req = SET;                             /* アクセルONで即始動させる必要があるので、初期変速要求(始動時のギヤ位置を指定する) */     /* こちら側にシフト位置変更要件を入れると処理の流れが複雑化するのでやめた */
+                    u8_shift_g_shifting_sequence = SHIFT_SEQ_CLUTCH_OFF_BFORE_CHG;         /* すでにクラッチオフだが、まずは変速の初回ステップであるクラッチオフに遷移させる */
                 }
             }
-            else if( u8_shift_g_shift_position_output != u8_shift_g_shift_position_req )
-            { /* 停止状態で シフトポジション要求が変化 */
-                u8_shift_g_shifting_sequence = SHIFT_SEQ_CLUTCH_OFF_BFORE_CHG;            /* クラッチOFFへ */
-            }
-            else
-            {
-                ;       /* 待機 */
+            else if( u8_shift_g_shift_mode == SHIFT_MODE_MANUAL )
+            { /* 現在マニュアル選択中 */
+                if( u8_shift_g_shift_position_req != u8_shift_g_shift_position_output )
+                { /* 変速要求が発生している */
+                    u8_shift_g_shifting_sequence = SHIFT_SEQ_CLUTCH_OFF_SHIFT_CHG;          /* 停止状態での変速はすぐに変速シーケンスへ飛ぶ */
+                }
+                else if( u8_sc_s_throttle_dir != SC_THROTTLE_DIR_NONE )
+                { /* スロットルONされた */
+                    if( u8_shift_g_shift_position_output != SHIFT_POSI_0 )
+                    { /* 現在0速(ニュートラルではない) */
+                        u8_shift_g_shifting_sequence = SHIFT_SEQ_CLUTCH_MEETING;            /* このタイミングで変速要求があった場合は、以降のシーケンスで受け付ける */
+                    }
+                }
             }
             break;
 
@@ -598,7 +586,11 @@ static void func_shift_s_shift_sequence( void )
             break;
         
         case SHIFT_SEQ_CLUTCH_ON_DRIVE:
-            u16_shift_s_clutch_off_cnt = (u16)0;
+            /* ↓↓↓↓ココの条件もう少し考えたい */
+            if( u16_shift_s_clutch_off_cnt < U16_MAX )
+            {
+                u16_shift_s_clutch_off_cnt++;
+            }
 
             /* 駆動中は常時変速許可 */
             if( u8_shift_g_shift_position_output != u8_shift_g_shift_position_req )
@@ -606,9 +598,21 @@ static void func_shift_s_shift_sequence( void )
                 u8_shift_g_shifting_sequence = SHIFT_SEQ_CLUTCH_OFF_BFORE_CHG;            /* クラッチOFFへ */
             }
 
-            if( u16_speedsens_g_speed_ave_1stgear == (u16)0 )
-            { /* 車が完全に停止した */
-                u8_shift_g_shifting_sequence = SHIFT_SEQ_CLUTCH_OFF_STOP;             /* クラッチ切る */
+            /* 停止判定 */
+            if( u16_shift_s_clutch_off_cnt > SHIFT_CLUTCH_OFF_BY_STOP_TIME )
+            { /* 車が動作中 or 変速後 or クラッチミート完了後 */
+                if( u16_speedsens_g_speed_ave_1stgear <= (u16)200 )       /* @@回転を下限値まで見れるようにしておかないと、この条件が働いて無限に始動できないかもぉ？ */
+                { /* 一定時間たってるのに車に動きがない */
+                    if( u8_sc_s_throttle_dir == SC_THROTTLE_DIR_NONE )
+                    { /* スロットル開けておらず停止している：単純に停止した */
+                        u8_shift_g_shifting_sequence = SHIFT_SEQ_CLUTCH_OFF_STOP;             /* クラッチ切る */
+                    }
+                    else
+                    { /* スロットルを開けており、クラッチミート完了したのに速度が出ていない：起動負荷高くて始動できてない判定とする */
+                        u8_shift_g_shifting_sequence = SHIFT_SEQ_CLUTCH_OFF_KICK;             /* クラッチ蹴飛ばせッッ！！ */
+                    }
+                    u16_shift_s_clutch_off_cnt = (u16)0;
+                }
             }
     #if 0
             /* クラッチキック要求 */
@@ -636,8 +640,7 @@ static void func_shift_s_shift_sequence( void )
         case SHIFT_SEQ_CLUTCH_OFF_SHIFT_CHG:
             /* シフトチェンジ */
             /*u8_shift_g_shift_position_output = u8_shift_g_shift_position_req;*/       /* シフト要求を反映 */      /* func_shift_s_shift_position_control() 側で制御 */
-            if( ( u8_shift_g_blip_complete == SET ) &&              /* ブリッピング完了 */
-                ( u8_shift_s_shifting_complete == SET ) )           /* 変速完了 */
+            if( u8_shift_s_shifting_complete == SET )           /* 変速完了 */
             { /*  */
                 u8_shift_g_shifting_sequence = SHIFT_SEQ_CLUTCH_OFF_AFTER_CHG;
             }
@@ -649,23 +652,27 @@ static void func_shift_s_shift_sequence( void )
             {
                 u16_shift_s_clutch_off_cnt++;
             }
-            if( u16_shift_s_clutch_off_cnt > SHIFT_CLUTCH_OFF_TO_ON_WAIT_TIME )
-            { /* クラッチOFFを最低維持する時間経過：変速用サーボの動作応答を待つ */
-                if( u16_speedsens_g_speed_ave_1stgear == (u16)0 )
-                { /* 車が完全に停止した状態での変速だった */
-                    u8_shift_g_shifting_sequence = SHIFT_SEQ_CLUTCH_OFF_STOP;                 /* クラッチ切った状態での停止状態へ戻る */
-                }
-                else if( u16_speedsens_g_speed_ave_1stgear < (u16)1000 )
-                { /* 車が動作中の変速ではあるが、あまり速度が出ていない */
-                    u8_shift_g_shifting_sequence = SHIFT_SEQ_CLUTCH_MEETING;                  /* 半クラッチで繋ぐ */
+             
+            if( u8_sc_s_throttle_dir == SC_THROTTLE_DIR_NONE )
+            { /* スロットル開けずに変速した */
+                u8_shift_g_shifting_sequence = SHIFT_SEQ_CLUTCH_OFF_STOP;                 /* マニュアルモード、クラッチ切った状態での変速（ガチャガチャしてるだけ判定）：停止状態へ戻る */
+            }
+            else /* (u8_sc_s_throttle_dir!=SC_THROTTLE_DIR_NONE) && (u8_sc_s_throttle_dir_before!=SC_THROTTLE_DIR_NONE) */
+            { /* アクセルをふかし続けている状態でシフトアップ発生 */
+                if( u8_shift_g_blip_complete_status == SHIFT_BLIP_STATUS_COMPLETE_MATCH )     /* 回転数一致による変速 */
+                {
+                    if( u16_shift_s_clutch_off_cnt > SHIFT_CLUTCH_OFF_TO_ON_WAIT_TIME )           /* 最低限は、変速後もクラッチOFFを継続（変速用サーボの応答を待機） */
+                    { /* クラッチOFFを最低維持する時間経過：変速用サーボの動作応答を待つ */
+                        u8_shift_g_shifting_sequence = SHIFT_SEQ_CLUTCH_ON_DRIVE;                 /* すぐにバチッとクラッチ繋ぐ */
+                        u16_shift_s_clutch_off_cnt = (u16)0;
+                    }
                 }
                 else
-                { /* 速度が十分に出た状態での変速 */
-                    u8_shift_g_shifting_sequence = SHIFT_SEQ_CLUTCH_ON_DRIVE;                 /* すぐにクラッチ繋ぐ */
+                { /* 速度が出てない状態でスロットル開けながら変速(始動) or タイムアウトにより何とか変速(回転数あってない) */
+                    u8_shift_g_shifting_sequence = SHIFT_SEQ_CLUTCH_MEETING;                  /* 半クラッチで繋ぐ */    /* @@半クラッチは、適切な速度域でない場合に、タイムアウトでクラッチ繋ぐ場合に使うほうが、実車の挙動に近いかも？ */
                 }
-                
-                u16_shift_s_clutch_off_cnt = (u16)0;
             }
+
             break;
 
         case SHIFT_SEQ_CLUTCH_OFF_KICK:
@@ -674,9 +681,10 @@ static void func_shift_s_shift_sequence( void )
             {
                 u16_shift_s_clutch_off_cnt++;
             }
+
             if( u16_shift_s_clutch_off_cnt > SHIFT_CLUTCH_OFF_TIME_KICK )
             {
-                u8_shift_g_shifting_sequence = SHIFT_SEQ_CLUTCH_MEETING;
+                u8_shift_g_shifting_sequence = SHIFT_SEQ_CLUTCH_ON_DRIVE;                       /* そのまま駆動状態に戻る (クラッチがガツンとつながり、以降始動できなければここと行き来してガクガクさせる) */
                 u16_shift_s_clutch_off_cnt = (u16)0;
             }
 
@@ -716,14 +724,14 @@ static void func_shift_s_shift_dir_judge( void )
 /**************************************************************/
 static void func_shift_s_blip_control( void )
 {
-    u8 u8_blip_cmp;
+    u8 u8_blip_sts;
     u16 u16_calc_buff;
 
     /* 初期化 */
-    u8_blip_cmp = CLEAR;
+    u8_blip_sts = SHIFT_BLIP_STATUS_WAITING;                /* ブリッピング待機中 */
 
     if( u8_shift_g_shifting_sequence == SHIFT_SEQ_CLUTCH_OFF_SHIFT_CHG )
-    { /* 変速シーケンス内 */
+    { /* 変速シーケンス内 & 0速ではない */
         /* タイムアウト判定用 */
         if( u16_shift_s_blip_timeout_cnt < U16_MAX )
         {
@@ -738,14 +746,14 @@ static void func_shift_s_blip_control( void )
             { /* シフトアップしようとしている */
                 if( u16_speedsens_g_speed_ave_mtr < u16_speedsens_g_speed_ave_1stgear )
                 { /* エンジン回転数 < 負荷軸側回転数 になるまで回転数が下がった */
-                    u8_blip_cmp = SET;
+                    u8_blip_sts = SET;
                 }
             }
             else if( u8_shift_s_shift_dir == SHIFT_POSITION_DOWN )
             { /* シフトダウンしようとしている */
                 if( u16_speedsens_g_speed_ave_mtr > u16_speedsens_g_speed_ave_1stgear )
                 { /* エンジン回転数 > 負荷軸側回転数 になるまで回転数が上がった */
-                    u8_blip_cmp = SET;
+                    u8_blip_sts = SET;
                 }
             }
 #else
@@ -761,22 +769,22 @@ static void func_shift_s_blip_control( void )
 
             if( u16_calc_buff < SHIFT_BLIP_SPEED_ACCURACY )     /* PIの応答にもよるが、大体で合わせる */
             { /* 大体回転数あってる */
-                u8_blip_cmp = SET;
+                u8_blip_sts = SHIFT_BLIP_STATUS_COMPLETE_MATCH;
             }
 #endif
         }
         else
         { /* ブリッピングできていなくても、変速完了させる */
-            u8_blip_cmp = SET;        /* @@デバッグ時は一時無効化したほうがよさそう */
+            u8_blip_sts = SHIFT_BLIP_STATUS_COMPLETE_TIMEOUT;        /* @@デバッグ時は一時無効化したほうがよさそう */
         }
     }
     else
     {
-        u8_blip_cmp = SET;          /* 変速時以外は使わないが、一応完了側に振っておく */
+        u8_blip_sts = SHIFT_BLIP_STATUS_WAITING;          /* 変速時以外は使わないが、一応完了側に振っておく */
         u16_shift_s_blip_timeout_cnt = (u16)0;
     }
 
-    u8_shift_g_blip_complete = u8_blip_cmp;
+    u8_shift_g_blip_complete_status = u8_blip_sts;
 }
 
 /**************************************************************/

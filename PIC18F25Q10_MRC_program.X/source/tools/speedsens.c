@@ -15,8 +15,8 @@
 
 
 /* パラメータ */
-#define SPEEDSENS_CAPTURE_MTR_NUM         ((u8)4)                     /* モータ回転数のキャプチャ保存数 */
-#define SPEEDSENS_CAPTURE_1STGEAR_NUM     ((u8)4)                     /* 1次側ギヤ回転数のキャプチャ保存数 */
+#define SPEEDSENS_CAPTURE_MTR_NUM         ((u8)4)                     /* 2,4,8,16 より選択可能。　※2のn倍のみ設定可能：モータ回転数のキャプチャ保存数 */
+#define SPEEDSENS_CAPTURE_1STGEAR_NUM     ((u8)4)                     /* 2,4,8,16 より選択可能。　※2のn倍のみ設定可能：1次側ギヤ回転数のキャプチャ保存数 */
 
 ts_speed_status speedsens_status[ SPEEDSENS_CH_NUM ];
 u16 u16_speedsens_g_speed_ave_mtr;
@@ -95,6 +95,7 @@ void func_speedsens_g_collect_capture( u16 u16_capture, ts_speed_status *sts )
     /* キャプチャ保存処理 */
     if( sts->u8_cap_timer_reload == SET )
     { /* ゲート クローズ時点でタイマのリロードが発生していた */
+        /* 値が信用できないので低速側で上書きする */
         sts->u16_p_capture_buff[ (sts->u8_buff_idx) ] = U16_MAX;            /* 最大値を設定 */
         sts->u8_cap_timer_reload = CLEAR;                                   /* リロードフラグ クリア */
     }
@@ -151,23 +152,45 @@ void func_speedsens_g_reset_capture_sts( ts_speed_status *sts )
 static void func_speedsens_s_capture_ave_update( ts_speed_status *sts )
 {
     u8 u8_loopcnt;
-    u8 u8_buff_idx_num;
     u32 u32_capture_sum;
 
     u8_loopcnt = (u8)0;
-    u8_buff_idx_num = (u8)0;
     u32_capture_sum = (u32)0;
 
     sts->u16_capture_ave = (u16)0;
 
-    u8_buff_idx_num = sts->u8_buff_num;
-
-    for( u8_loopcnt = (u8)0; u8_loopcnt < u8_buff_idx_num; u8_loopcnt++ )
+    for( u8_loopcnt = (u8)0; u8_loopcnt < (sts->u8_buff_num); u8_loopcnt++ )
     { /* バッファの合計値をすべて合算 */
         u32_capture_sum += (u32)(sts->u16_p_capture_buff[ u8_loopcnt ]);
     }    
     
-    sts->u16_capture_ave = (u16)( u32_capture_sum / sts->u8_buff_num );
+    if( sts->u8_buffer_filled == SET )
+    {
+        if( sts->u8_buff_num == (u8)2 )
+        {
+            sts->u16_capture_ave = (u16)( u32_capture_sum >> 1U );
+        }
+        else if( sts->u8_buff_num == (u8)4 )
+        {
+            sts->u16_capture_ave = (u16)( u32_capture_sum >> 2U );
+        }
+        else if( sts->u8_buff_num == (u8)8 )
+        {
+            sts->u16_capture_ave = (u16)( u32_capture_sum >> 3U );
+        }
+        else if( sts->u8_buff_num == (u8)16 )
+        {
+            sts->u16_capture_ave = (u16)( u32_capture_sum >> 4U );
+        }
+        else
+        { /* これ以外の場合は設定ミスとする。ソフトとしてはとりあえず動くようにしておく。 */
+            sts->u16_capture_ave = sts->u16_p_capture_buff[ u8_loopcnt ];
+        }
+    }
+    else
+    {
+        sts->u16_capture_ave = U16_MAX;
+    }
 }
 
 /**************************************************************/
@@ -182,26 +205,19 @@ static u16 func_speedsens_s_calc_speed( ts_speed_status *sts )
     u16_result = (u16)0;
     u32_speed = (u32)0;
     
-    if( sts->u8_buffer_filled == SET )
-    { /* バッファの更新が発生している & タイマの折り返しがない */
-        u32_speed = (u32)SPEEDSENS_MAX_SPEED_AT_1_CAPTURE / (u32)(sts->u16_capture_ave);        /* キャプチャ1あたりの回転数 / キャプチャ値：キャプチャがx倍になれば、回転数は1/xになる関係 */
+    u32_speed = (u32)SPEEDSENS_MAX_SPEED_AT_1_CAPTURE / (u32)(sts->u16_capture_ave);        /* キャプチャ1あたりの回転数 / キャプチャ値：キャプチャがx倍になれば、回転数は1/xになる関係 */
 
-        if( u32_speed > U16_MAX )
-        { /* 回転数が速すぎる */
-            u16_result = U16_MAX;
-        }
-        else if( u32_speed < SPEEDSENS_MIN_SPEED_DETECTABLE )
-        { /* 検出可能回転数より下は、0rpmにならずに止まってしまうため、0rpmへ上書きする */
-            u16_result = (u16)0;
-        }
-        else
-        {
-            u16_result = (u16)u32_speed;
-        }
+    if( u32_speed > U16_MAX )
+    { /* 回転数が速すぎる */
+        u16_result = U16_MAX;
+    }
+    else if( u32_speed < (u32)SPEEDSENS_MIN_SPEED_DETECTABLE )
+    { /* 検出可能回転数より下は、0rpmにならずに止まってしまうため、0rpmへ上書きする */
+        u16_result = (u16)0;
     }
     else
-    { /* 回転開始直後 or ゲート割り込みが来てない状態が継続中 */
-        u16_result = (u16)0;         /* 実質、起動後初期値となる。 とりあえず低速側に設定しておく */
+    {
+        u16_result = (u16)u32_speed;
     }
 
     return u16_result;

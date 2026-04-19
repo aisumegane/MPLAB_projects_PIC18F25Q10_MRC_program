@@ -112,7 +112,7 @@ void __interrupt(low_priority) low_isr(void)
     { /* モータ回転数 未検出割り込み */
         /* TMR1のゲートオフ中はカウントが進まないので、TMRxGIF発生後直後にここにきて取得したキャプチャが無効な値として扱われることはない。 */
         /* ただし回転検出そのものが１周期おきなので、回転検出の精度自体が下がる。 */
-        func_int_s_timer1_overflow();
+        //@@ちゃんと動いてないfunc_int_s_timer1_overflow();
         INT_FLAG_TMR1_OVERFLOW = CLEAR;
     }
     
@@ -124,7 +124,7 @@ void __interrupt(low_priority) low_isr(void)
 
     if( INT_FLAG_TMR3_OVERFLOW == SET )
     { /* 1次側ギヤ回転数 未検出割り込み */
-        func_int_s_timer3_overflow();
+        //@ちゃんと動いてない！！func_int_s_timer3_overflow();
         INT_FLAG_TMR3_OVERFLOW = CLEAR;
     }
 }

@@ -26,15 +26,16 @@ extern "C" {
 #define SHIFT_POSI_6                ((u8)6)
 #define SHIFT_POSI_7                ((u8)7)
 #define SHIFT_POSI_8                ((u8)8)
+#define SHIFT_POSI_MAX              SHIFT_POSI_8
 #define SHIFT_POSI_NUM              (SHIFT_POSI_8 + (u8)1)
 
 /* 変速シーケンス */
 #define SHIFT_SEQ_CLUTCH_OFF_STOP           ((u8)0)      /* 停止状態でクラッチOFF */
 #define SHIFT_SEQ_CLUTCH_MEETING            ((u8)1)
 #define SHIFT_SEQ_CLUTCH_ON_DRIVE           ((u8)2)
-#define SHIFT_SEQ_CLUTCH_OFF_BFORE_CHG      ((u8)3)
-#define SHIFT_SEQ_CLUTCH_OFF_SHIFT_CHG      ((u8)4)
-#define SHIFT_SEQ_CLUTCH_OFF_AFTER_CHG      ((u8)5)
+#define SHIFT_SEQ_CLUTCH_OFF_BFORE_CHG      ((u8)3)      /* 変速前のクラッチオフ */
+#define SHIFT_SEQ_CLUTCH_OFF_SHIFT_CHG      ((u8)4)      /* 変速 */
+#define SHIFT_SEQ_CLUTCH_OFF_AFTER_CHG      ((u8)5)      /* 変速後のクラッチオン */
 #define SHIFT_SEQ_CLUTCH_OFF_KICK           ((u8)6)
 
 

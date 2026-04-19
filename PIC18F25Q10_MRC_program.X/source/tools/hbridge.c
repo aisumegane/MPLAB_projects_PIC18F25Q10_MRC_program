@@ -69,7 +69,7 @@ void func_inverter_g_init( void )
 /*  インバータ制御 メインループ処理                              */
 /*                                                            */
 /**************************************************************/
-void func_hbridge_g_main( void )            /* やっぱりmain.cからの呼び出し関数にするのは難易度高いかも */
+void func_hbridge_g_main( void )
 {                                                            /* 以降、このグローバル関数内で操作する形にする */
     ;
 }

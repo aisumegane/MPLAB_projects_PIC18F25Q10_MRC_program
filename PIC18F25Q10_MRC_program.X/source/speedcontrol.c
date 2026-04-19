@@ -39,8 +39,8 @@
 #define SC_THROTTLE_HYSTERESIS          RC_CH_DUTY_5P           /* スロットル操作のヒステリシス */
 #define SC_IDLING_DUTY                  HBRIDGE_DUTY_10P        /* アイドリング中のduty */
 
-#define SC_RPM_CTRL_GAIN_P_DIV2N        ((u8)6)                 /* Pゲイン 割り算形式で実装　※大きくするほど変化が緩やかになる */
-#define SC_RPM_CTRL_GAIN_I_DIV2N        ((u8)6)                 /* Iゲイン 割り算形式で実装　※大きくするほど変化が緩やかになる */   /* @@大きすぎる(割り算しすぎ)だと、i項がs16の範囲を外れてしまうので注意。飽和状態で32767は超えない設計にすること！！！！ */
+#define SC_RPM_CTRL_GAIN_P_DIV2N        ((u8)6)                 /* Pゲイン  1/32  割り算形式で実装　※大きくするほど変化が緩やかになる */
+#define SC_RPM_CTRL_GAIN_I_DIV2N        ((u8)6)                 /* Iゲイン  1/32  割り算形式で実装　※大きくするほど変化が緩やかになる */   /* @@大きすぎる(割り算しすぎ)だと、i項がs16の範囲を外れてしまうので注意。飽和状態で32767は超えない設計にすること！！！！ */
 
 #define SC_THROTTLE_DIR_RESET_TIME      ((u8)100)               /* スロットル中立 遷移待機カウント */
 
@@ -65,6 +65,7 @@ u8 u8_sc_g_throttle_duty_ref;           /* 指令duty */
 static u8 u8_sc_s_duty_update_cycle_cnt;
 
 /* 回転数PI制御 */
+static u8 u8_speedsens_g_pi_control_1st;
 u8 u8_sc_s_pi_saturate_flag;
 s16 s16_sc_s_integral_cnt;
 
@@ -94,6 +95,9 @@ void func_speedcontrol_g_init( void )
     u8_sc_s_duty_update_cycle_cnt = (u8)0;
     s16_sc_s_integral_cnt = (s16)0;
     u8_sc_s_pi_saturate_flag = CLEAR;
+
+    /* 回転数PI制御 */
+    u8_speedsens_g_pi_control_1st = CLEAR;
 }
 
 
@@ -265,9 +269,11 @@ static void func_sc_s_calc_duty( void )
                 ( u8_shift_g_shifting_sequence == SHIFT_SEQ_CLUTCH_OFF_SHIFT_CHG ) )
             { /* 変速移行期間 */
                 u16_duty_new = func_sc_s_rpm_pi_ctrl( u16_speedsens_g_speed_ave_1stgear, u16_speedsens_g_speed_ave_mtr, u16_duty_now );     /* 回転数追従制御によるduty指令値 */
+                u8_speedsens_g_pi_control_1st = CLEAR;            /* PI制御初回完了 */
             }
             else
             { /*  */
+                u8_speedsens_g_pi_control_1st = SET;              /* PI制御フラグセット */
                 u16_duty_new = func_sc_s_const_duty_ctrl( u8_sc_g_throttle_rc_ch_duty_target, u16_duty_now );           /* 狙いのdutyを出したときに回転数が変速閾値超えたなら、勝手に変速するだけ duty制御側は特に何もしない */
             }
             break;
@@ -387,6 +393,8 @@ static u16 func_sc_s_rpm_pi_ctrl( u16 u16_speed_target, u16 u16_speed_now, u16 u
     s16 s16_term_pi;
     s16 s16_duty_new;
     s16 s16_calc_buff;
+    s16 s16_calc_buff2;
+    u16 u16_calc_buff;
 
     /* 初期化 */
     u16_duty_now_buff = (u16)0;
@@ -397,15 +405,8 @@ static u16 func_sc_s_rpm_pi_ctrl( u16 u16_speed_target, u16 u16_speed_now, u16 u
     s16_duty_new = (s16)0;
 
     s16_calc_buff = (s16)0;
-
-    /* 初期値の設定 */
-    if( ( u8_shift_g_shifting_sequence_before != SHIFT_SEQ_CLUTCH_OFF_SHIFT_CHG ) &&
-        ( u8_shift_g_shifting_sequence == SHIFT_SEQ_CLUTCH_OFF_SHIFT_CHG ) )
-    { /* 変速のためのPI制御初回 */
-        s16_sc_s_integral_cnt = (s8)0;
-    }
-    s16_term_i = s16_sc_s_integral_cnt;         /* 前回までにためた積分項 */
-
+    s16_calc_buff2 = (s16)0;
+    u16_calc_buff = (u16)0;
 
     /* 範囲制限 */
     /* 符号型で取り扱える最大値を超えている場合は入力を修正する */
@@ -426,7 +427,7 @@ static u16 func_sc_s_rpm_pi_ctrl( u16 u16_speed_target, u16 u16_speed_now, u16 u
 
 
     /* 回転数偏差を取得 */
-    s16_speed_diff = (s16)u16_speed_target - (s16)u16_speed_now;
+    s16_speed_diff = (s16)u16_speed_target - (s16)u16_speed_now;        /* 2項はどちらも必ず正の領域にいるので、減算でオーバーフローは発生しない */
 
     /* P項の計算 */
     if( s16_speed_diff >= (s16)0 )
@@ -443,46 +444,79 @@ static u16 func_sc_s_rpm_pi_ctrl( u16 u16_speed_target, u16 u16_speed_now, u16 u
 
         s16_term_p = s16_calc_buff;
     }
-    
 
-    /* I項の計算 */
-    /* 前回までの値を累積 */
-    if( u8_sc_s_pi_saturate_flag == CLEAR )
-    { /* 出力 飽和していない */
-        s16_term_i = s16_term_i + s16_speed_diff;           /* 前回までの積分値+今回の偏差 */
 
-        if( s16_term_i >= (s16)0 )
-        { /* 積分項は正 */
-            s16_term_i = s16_term_i >> SC_RPM_CTRL_GAIN_I_DIV2N;            /* Iゲイン積算 */
+    /* 積分項 初期値の設定 */
+    if( u8_speedsens_g_pi_control_1st == SET )
+    { /* PI制御初回 */
+        s16_sc_s_integral_cnt = (s16)u16_duty_now - s16_term_p;
+    }    
+    else 
+    {
+        /* I項の計算 */
+        /* 前回までの値を累積 */
+        if( u8_sc_s_pi_saturate_flag == CLEAR )
+        { /* 出力 飽和していない */
+            s16_calc_buff = s16_term_i;                         /* 現在の積分項をいったん保存 */
+            s16_calc_buff2 = s16_speed_diff;                    /* これから加算しようとしている量をいったん保存 */
+            s16_term_i = s16_term_i + s16_speed_diff;           /* 前回までの積分値+今回の偏差 */
+
+            /* 積分項範囲 オーバーフロー/アンダーフロー判定 */
+            if( ( s16_calc_buff  >= (s16)0 ) ||
+                ( s16_calc_buff2 >= (s16)0 ) )
+            { /* 積分項を正で増える方向に加算 */
+                if( s16_term_i < (s16)0 )
+                { /* 正+正で負の数になった：オーバーフロー */
+                    s16_term_i = (s16)32767;        /* 16bit 正の最大値で上書き・固定 */
+                }
+            }
+            else if( ( s16_calc_buff  <= (s16)0 ) ||
+                    ( s16_calc_buff2 <= (s16)0 ) )
+            { /* 積分項を負で増える方向に加算 */
+                if( s16_term_i > s16_calc_buff )
+                { /* 負+負で正の数になった：アンダーフロー */
+                    s16_term_i = (s16)-32768;        /* 16bit 正の最大値で上書き・固定 ※10進数の32767は、キャストにより元の1000-0000-0000-0000 へ戻る */
+                }
+            }
+            else
+            { /* それ以外 */
+                ;       /* 元の積分項に対して加算量がでかすぎると、正+負、負+正の計算でもアンダーフロー/オーバーフローが起こりうるが、そこはゲイン設定ミスとして扱う(ゲインで超えないように調整する！) */
+            }
+
+
+            if( s16_term_i >= (s16)0 )
+            { /* 積分項は正 */
+                s16_term_i = s16_term_i >> SC_RPM_CTRL_GAIN_I_DIV2N;            /* Iゲイン積算 */
+            }
+            else
+            { /* 積分項は負 */
+                s16_calc_buff = -s16_term_i;                                    /* 絶対値に戻す */
+                s16_calc_buff = s16_calc_buff >> SC_RPM_CTRL_GAIN_I_DIV2N;      /* Iゲイン積算 */
+                s16_calc_buff = -s16_calc_buff;                                 /* 符号を戻す */
+
+                s16_term_i = s16_calc_buff;
+            }
         }
         else
-        { /* 積分項は負 */
-            s16_calc_buff = -s16_term_i;                                    /* 絶対値に戻す */
-            s16_calc_buff = s16_calc_buff >> SC_RPM_CTRL_GAIN_I_DIV2N;      /* Iゲイン積算 */
-            s16_calc_buff = -s16_calc_buff;                                 /* 符号を戻す */
-
-            s16_term_i = s16_calc_buff;
+        { /* 出力 飽和状態 */
+            ;           /* I項現在の値を維持 */
         }
     }
-    else
-    { /* 出力 飽和状態 */
-        ;           /* I項現在の値を維持 */
-    }
+
 
     /* 操作量：P項 + I項 */
     s16_term_pi = s16_term_p + s16_term_i;
-    s16_duty_new = (s16)u16_duty_now + s16_term_pi;           /* 常に正の範囲の出力duty + 符号を持つ操作量 の和 ※あくまで現在の出力dutyを初期値として偏差を制御して、一定duty制御->PI制御切り替え時に緩やかにつなぎたい */
-                                                              /* 回転数が一致した場合、PI制御出力は0になる設計をしてみた。 */
+    s16_duty_new = s16_term_pi;                 /* 回転数が一致した場合、PI制御出力は0になる設計をしてみた。 */
 
     /* 範囲制限 */
-    if( s16_duty_new > (s16)RC_CH_DUTY_100P )
+    if( s16_duty_new > (s16)HBRIDGE_DUTY_100P )
     { /* 合計操作量が100%を超えた */
-        s16_duty_new =  (s16)RC_CH_DUTY_100P;
+        s16_duty_new =  (s16)HBRIDGE_DUTY_100P;
         u8_sc_s_pi_saturate_flag = SET;
     }
-    else if( s16_duty_new < (s16)RC_CH_DUTY_0P )
+    else if( s16_duty_new < (s16)HBRIDGE_DUTY_0P )
     { /* 操作量が0%を下回った */
-        s16_duty_new =  (s16)RC_CH_DUTY_0P;
+        s16_duty_new =  (s16)HBRIDGE_DUTY_0P;
         u8_sc_s_pi_saturate_flag = SET;
     }
     else

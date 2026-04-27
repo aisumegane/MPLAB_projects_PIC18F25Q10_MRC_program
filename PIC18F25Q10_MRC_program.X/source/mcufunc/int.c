@@ -33,8 +33,8 @@
 /* 関数プロトタイプ宣言 */
 static void func_int_s_timer1_gate_close( void );
 static void func_int_s_timer3_gate_close( void );
-static void func_int_s_timer1_overflow( void );
-static void func_int_s_timer3_overflow( void );
+static void func_int_s_timer1_overflow_with_gete_open( void );
+static void func_int_s_timer3_overflow_with_gate_open( void );
 
 
 
@@ -110,9 +110,9 @@ void __interrupt(low_priority) low_isr(void)
 
     if( INT_FLAG_TMR1_OVERFLOW == SET )
     { /* モータ回転数 未検出割り込み */
-        /* TMR1のゲートオフ中はカウントが進まないので、TMRxGIF発生後直後にここにきて取得したキャプチャが無効な値として扱われることはない。 */
-        /* ただし回転検出そのものが１周期おきなので、回転検出の精度自体が下がる。 */
-        //@@ちゃんと動いてないfunc_int_s_timer1_overflow();
+        /* ゲート機能ではゲートクローズ中カウントが進まない仕様、最後にゲートオープンしてオーバーフローする場合は検出可能 */
+        /* 最後にゲートクローズしてキャプチャ取得した場合、タイマのカウント自体が進まなくなるのでオーバーフロー検知不可能 */
+        func_int_s_timer1_overflow_with_gete_open();
         INT_FLAG_TMR1_OVERFLOW = CLEAR;
     }
     
@@ -124,7 +124,7 @@ void __interrupt(low_priority) low_isr(void)
 
     if( INT_FLAG_TMR3_OVERFLOW == SET )
     { /* 1次側ギヤ回転数 未検出割り込み */
-        //@ちゃんと動いてない！！func_int_s_timer3_overflow();
+        func_int_s_timer3_overflow_with_gate_open();
         INT_FLAG_TMR3_OVERFLOW = CLEAR;
     }
 }
@@ -153,7 +153,11 @@ void func_int_g_init( void )
     ;
 }
 
-/* タイマ1ゲート 閉鎖割り込み */
+/**************************************************************/
+/*  Function:                                                 */
+/* タイマ1ゲート 閉鎖割り込み                                   */
+/*                                                            */
+/**************************************************************/
 static void func_int_s_timer1_gate_close( void )
 {
     u16 u16_data_buff;
@@ -164,7 +168,11 @@ static void func_int_s_timer1_gate_close( void )
     TMR1 = (u16)0;              /* タイマクリア ※タイマゲートオフ区間のはずなので、ここで１回クリアするだけでOK */
 }
 
-/* タイマ1ゲート 閉鎖割り込み */
+/**************************************************************/
+/*  Function:                                                 */
+/* タイマ3ゲート 閉鎖割り込み                                   */
+/*                                                            */
+/**************************************************************/
 static void func_int_s_timer3_gate_close( void )
 {
     u16 u16_data_buff;
@@ -175,19 +183,32 @@ static void func_int_s_timer3_gate_close( void )
     TMR3 = (u16)0;              /* タイマクリア ※タイマゲートオフ区間のはずなので、ここで１回クリアするだけでOK */
 }
 
-
+/**************************************************************/
+/*  Function:                                                 */
+/* タイマ1 オーバーフロー割り込み                                */
+/* ゲートオープンで停止したときのみ、動作する                     */
+/* ゲートクローズで停止した場合はカウントが停止してオーバーフロー   */
+/* 検知できないので、ループタスク側で設定する                     */
+/* ※※磁石位置によるのでどっちで停止するかわからない。            */
+/**************************************************************/
 /* @@オーバーフロー側はデバッグでのデバッグが厳しい */
 /* 評価する方法考えてみる。　動き的には多分大丈夫そうだが。 */
 /* タイマ1 オーバーフロー割り込み */
-static void func_int_s_timer1_overflow( void )
+static void func_int_s_timer1_overflow_with_gete_open( void )
 {
     func_speedsens_g_reset_capture_sts( &speedsens_status[ SPEEDSENS_CH_MTR ] );
     speedsens_status[ SPEEDSENS_CH_MTR ] .u8_cap_timer_reload = SET;                /* リロードは上記初期化関数内でSETしてないので、ここで設定 */
 }
 
-
-/* タイマ3 オーバーフロー割り込み */
-static void func_int_s_timer3_overflow( void )
+/**************************************************************/
+/*  Function:                                                 */
+/* タイマ3 オーバーフロー割り込み                                */
+/* ゲートオープンで停止したときのみ、動作する                     */
+/* ゲートクローズで停止した場合はカウントが停止してオーバーフロー   */
+/* 検知できないので、ループタスク側で設定する                     */
+/* ※※磁石位置によるのでどっちで停止するかわからない。            */
+/**************************************************************/
+static void func_int_s_timer3_overflow_with_gate_open( void )
 {
     func_speedsens_g_reset_capture_sts( &speedsens_status[ SPEEDSENS_CH_1STGEAR ] );
     speedsens_status[ SPEEDSENS_CH_1STGEAR ] .u8_cap_timer_reload = SET;                /* リロードは上記初期化関数内でSETしてないので、ここで設定 */

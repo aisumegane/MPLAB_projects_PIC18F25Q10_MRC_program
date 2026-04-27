@@ -268,7 +268,7 @@ static void func_sc_s_calc_duty( void )
                 ( u8_shift_g_shifting_sequence == SHIFT_SEQ_CLUTCH_OFF_AFTER_CHG ) ||
                 ( u8_shift_g_shifting_sequence == SHIFT_SEQ_CLUTCH_OFF_SHIFT_CHG ) )
             { /* 変速移行期間 */
-                u16_duty_new = func_sc_s_rpm_pi_ctrl( u16_speedsens_g_speed_ave_1stgear, u16_speedsens_g_speed_ave_mtr, u16_duty_now );     /* 回転数追従制御によるduty指令値 */
+                u16_duty_new = func_sc_s_rpm_pi_ctrl( u16_speedsens_g_rpm_ary[ SPEEDSENS_CH_1STGEAR ], u16_speedsens_g_rpm_ary[ SPEEDSENS_CH_MTR ], u16_duty_now );     /* 回転数追従制御によるduty指令値 */
                 u8_speedsens_g_pi_control_1st = CLEAR;            /* PI制御初回完了 */
             }
             else
@@ -614,7 +614,7 @@ static void func_sc_s_drive_status_update( void )
         }
         else if( u8_sc_s_throttle_dir == SC_THROTTLE_DIR_NONE )
         { /* スロットルオフされた */
-            if( u16_speedsens_g_speed_ave_1stgear <= (u16)0 )
+            if( u16_speedsens_g_rpm_ary[ SPEEDSENS_CH_1STGEAR ] <= (u16)0 )
             { /* 車体が停止状態 */
                 u8_sc_s_drive_status = SC_DRIVE_STATUS_IDLING;
             }
@@ -637,7 +637,7 @@ static void func_sc_s_drive_status_update( void )
         }
         else if( u8_sc_s_throttle_dir == SC_THROTTLE_DIR_NONE )
         { /* スロットルオフされた */
-            if( u16_speedsens_g_speed_ave_1stgear <= (u16)0 )
+            if( u16_speedsens_g_rpm_ary[ SPEEDSENS_CH_1STGEAR ] <= (u16)0 )
             { /* 車体が停止状態 */
                 u8_sc_s_drive_status = SC_DRIVE_STATUS_IDLING;
             }

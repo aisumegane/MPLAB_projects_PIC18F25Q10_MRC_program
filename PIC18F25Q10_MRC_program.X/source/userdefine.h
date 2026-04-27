@@ -47,8 +47,14 @@ typedef  signed long    s32;
 #define     U32_MAX    ((u32)0xFFFFFFFF)
 
 
+/* 全ファイル共通変数 */
+extern u16 u16_ud_debug_output0;
+extern u16 u16_ud_debug_output1;
+extern u16 u16_ud_debug_output2;
+extern u16 u16_ud_debug_output3;
 
 /* 全ファイル共通関数 */
+extern void func_ud_g_init( void );
 extern u32 func_ud_g_calcmul_2x2_byte( u16 u16_arg1, u16 u16_arg2 );
 extern u32 func_ud_g_calcdiv_4x4_byte( u32 u32_arg1, u32 u32_arg2 );
 

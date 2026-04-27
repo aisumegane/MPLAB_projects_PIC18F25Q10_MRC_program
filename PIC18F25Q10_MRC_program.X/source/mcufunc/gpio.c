@@ -17,6 +17,8 @@
 /* 入力ポート割り当て設定 */
 gpio_in gpio_g_paddle_shift_sw;
 gpio_in gpio_g_shift_mode_sw;
+gpio_in gpio_g_speed_1stgear_sw;
+gpio_in gpio_g_speed_mtr_sw;
 
 
 /* 出力ポート割り当て設定 (レジスタ・bit指定) */
@@ -43,6 +45,8 @@ static void func_gpio_s_port_judge( gpio_in* ts_port, u8 port_in );
 
 static void func_gpio_s_judge_input_paddle_shift( void );
 static void func_gpio_s_judge_input_shift_mode( void );
+static void func_gpio_s_judge_input_speed_1stgear( void );
+static void func_gpio_s_judge_input_speed_mtr( void );
 
 
 /* グローバル変数 */
@@ -69,6 +73,8 @@ void func_gpio_g_init( void )
 {
     gpio_g_paddle_shift_sw = ts_gpio_s_in_init;
     gpio_g_shift_mode_sw = ts_gpio_s_in_init;
+    gpio_g_speed_1stgear_sw = ts_gpio_s_in_init;
+    gpio_g_speed_mtr_sw = ts_gpio_s_in_init;
 
 
     U8_GPIO_G_OUT_NEUTRAL = CLEAR;
@@ -89,6 +95,8 @@ static void func_gpio_s_in_judge( void )
 {
     func_gpio_s_judge_input_paddle_shift();
     func_gpio_s_judge_input_shift_mode();
+    func_gpio_s_judge_input_speed_1stgear();
+    func_gpio_s_judge_input_speed_mtr();
 }
 
 
@@ -191,6 +199,24 @@ static void func_gpio_s_judge_input_shift_mode( void )
     }
 
     func_gpio_s_port_judge( &gpio_g_shift_mode_sw, u8_port_state_buff );
+}
+
+/**************************************************************/
+/*  Function:                                                 */
+/*  1次側ギヤ 入力判定関数                                      */
+/**************************************************************/
+static void func_gpio_s_judge_input_speed_1stgear( void )
+{
+    func_gpio_s_port_judge( &gpio_g_speed_1stgear_sw, GPIO_IN_SPEED_1STGEAR );
+}
+
+/**************************************************************/
+/*  Function:                                                 */
+/*  モータギヤ 入力判定関数                                     */
+/**************************************************************/
+static void func_gpio_s_judge_input_speed_mtr( void )
+{
+    func_gpio_s_port_judge( &gpio_g_speed_mtr_sw, GPIO_IN_SPEED_MTR );
 }
 
 

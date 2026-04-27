@@ -14,6 +14,7 @@ extern "C" {
 
 extern void func_dac_g_main( void );
 extern void func_dac_g_init( void );
+extern void func_dac_s_debug_out( u32 u32_val, u32 u32_val_max );
 
 #ifdef	__cplusplus
 }

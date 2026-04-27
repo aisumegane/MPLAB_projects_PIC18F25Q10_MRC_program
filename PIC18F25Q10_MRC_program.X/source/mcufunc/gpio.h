@@ -19,6 +19,9 @@ extern "C" {
 #define GPIO_IN_RC_CH_SHIFT_UPDOWN          RA3
 #define GPIO_IN_RC_CH_SHIFT_REV_LIMIT       RA4
 
+#define GPIO_IN_SPEED_1STGEAR               RC1
+#define GPIO_IN_SPEED_MTR                   RC0
+
 /* 出力ポート割り当て定義 */
 #define GPIO_OUT_SHIFT_NEUTRAL              LATB4
 #define GPIO_OUT_SHIFT_0                    LATB3
@@ -43,6 +46,8 @@ extern void func_gpio_g_init( void );
 
 extern gpio_in gpio_g_paddle_shift_sw;
 extern gpio_in gpio_g_shift_mode_sw;
+extern gpio_in gpio_g_speed_1stgear_sw;
+extern gpio_in gpio_g_speed_mtr_sw;
 
 
 extern u8 U8_GPIO_G_OUT_NEUTRAL;

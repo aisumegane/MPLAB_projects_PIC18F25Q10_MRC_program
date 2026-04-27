@@ -138,7 +138,7 @@ static u16 u16_shift_s_auto_position_cnt;
 
 /* パラメータ定義 */
 /* 現在のシフト位置で、duty50%で出せる速度設定 */
-static const u16 u16_shift_s_shift_posi_50per_speed_ary[ SHIFT_POSI_NUM ] =
+static const u16 u16_shift_s_shift_posi_50per_rpm_ary[ SHIFT_POSI_NUM ] =
 {
     SHIFT_POSI_0_APPR_RPM,
     SHIFT_POSI_1_APPR_RPM,
@@ -291,7 +291,7 @@ static void func_shift_s_shift_position_decide_mode_automatic( void )
     u16 u16_shift_his_speed;
     u32 u32_calc_buff;
     
-    u16 u16_shift_thr_speed_his;        /* 変速閾値ヒステリシス */
+    u16 u16_shift_chg_thr_rpm_his;        /* 変速閾値ヒステリシス */
     
     u16 u16_position_rpm_1minus;
     u16 u16_position_rpm_1plus;
@@ -305,7 +305,6 @@ static void func_shift_s_shift_position_decide_mode_automatic( void )
 
 
     
-    GPIO_OUT_DEBUG = SET;
 
     /* グローバル変数取得 */
     u8_shift_position_req_before = u8_shift_g_shift_position_req;
@@ -329,7 +328,7 @@ static void func_shift_s_shift_position_decide_mode_automatic( void )
     { /* 今回がアクセルON初回 */
         for( u8_shift_start_range = SHIFT_POSI_0; u8_shift_start_range < SHIFT_POSI_MAX; u8_shift_start_range++ )
         { /* ※8速目は検索から除外、どのみち7速でbreakできなかったら、8速で出てくるため。 */
-            if( u16_speedsens_g_speed_ave_1stgear <= u16_shift_s_shift_posi_50per_speed_ary[ u8_shift_start_range ] )
+            if( u16_speedsens_g_rpm_ary[ SPEEDSENS_CH_1STGEAR ] <= u16_shift_s_shift_posi_50per_rpm_ary[ u8_shift_start_range ] )
             { /* 現在の速度域から、最適な変速開始位置を探す */
                 break;
             }
@@ -345,8 +344,8 @@ static void func_shift_s_shift_position_decide_mode_automatic( void )
         }
     }
     else
-    {
-        ;
+    { /* アクセルONでない 初回でない */
+        ;           /* 初回のシフト位置決定以降は強制上書きしない */
     }
 
     /* シフトチェンジのレブリミットレベルを算出する */
@@ -355,26 +354,26 @@ static void func_shift_s_shift_position_decide_mode_automatic( void )
     u32_calc_buff = (u32)0;
     u32_calc_buff = func_ud_g_calcmul_2x2_byte( (u16)u8_rc_g_ch_duty_tbl[RC_DUTY_CH_REV_LIMIT], (u16)SHIFT_POSI_CHG_HIS_MAX );
     u32_calc_buff = func_ud_g_calcdiv_4x4_byte( u32_calc_buff, (u32)RC_CH_DUTY_100P );
-    u16_shift_thr_speed_his = (u16)u32_calc_buff;
+    u16_shift_chg_thr_rpm_his = (u16)u32_calc_buff;
     
     /* シフトチェンジの回転数閾値を計算する */
     if( u8_shift_g_shift_position_output == SHIFT_POSI_1 )
     { /* 現在1速：シフトアップのみ可能 */
-        u16_shift_up_thr_speed   = u16_shift_s_shift_posi_50per_speed_ary[ SHIFT_POSI_1 ] + u16_shift_thr_speed_his;
+        u16_shift_up_thr_speed   = u16_shift_s_shift_posi_50per_rpm_ary[ SHIFT_POSI_1 ] + u16_shift_chg_thr_rpm_his;
         u16_shift_down_thr_speed = (u16)0;      /* @@ココの値どうしよう... */
     }
     else if( u8_shift_g_shift_position_output == SHIFT_POSI_MAX )
     { /* 現在8速：シフトダウンのみ可能 */
         u16_shift_up_thr_speed   = U16_MAX;    /* ひとまず変速不可能な回転数にしておく */
-        if( u16_shift_s_shift_posi_50per_speed_ary[ SHIFT_POSI_MAX ] > u16_shift_thr_speed_his )
+        if( u16_shift_s_shift_posi_50per_rpm_ary[ SHIFT_POSI_MAX ] > u16_shift_chg_thr_rpm_his )
         {
-            u16_shift_down_thr_speed = u16_shift_s_shift_posi_50per_speed_ary[ SHIFT_POSI_MAX - (u8)1 ] - u16_shift_thr_speed_his;
+            u16_shift_down_thr_speed = u16_shift_s_shift_posi_50per_rpm_ary[ SHIFT_POSI_MAX - (u8)1 ] - u16_shift_chg_thr_rpm_his;
         }
     }
     else
     { /* "現在" 1～6速 */
-        u16_shift_up_thr_speed = u16_shift_s_shift_posi_50per_speed_ary[ u8_shift_g_shift_position_output ] + u16_shift_thr_speed_his;
-        u16_shift_down_thr_speed = u16_shift_s_shift_posi_50per_speed_ary[ u8_shift_g_shift_position_output ] - u16_shift_thr_speed_his;
+        u16_shift_up_thr_speed = u16_shift_s_shift_posi_50per_rpm_ary[ u8_shift_g_shift_position_output ] + u16_shift_chg_thr_rpm_his;
+        u16_shift_down_thr_speed = u16_shift_s_shift_posi_50per_rpm_ary[ u8_shift_g_shift_position_output ] - u16_shift_chg_thr_rpm_his;
     }
     
     /* 変速処理 */
@@ -383,7 +382,7 @@ static void func_shift_s_shift_position_decide_mode_automatic( void )
     { /* 変速後は少し間を置く */
 
         /* アクセル踏んでいる */
-        if( u16_speedsens_g_speed_ave_1stgear >= u16_shift_up_thr_speed )
+        if( u16_speedsens_g_rpm_ary[ SPEEDSENS_CH_1STGEAR ] >= u16_shift_up_thr_speed )
         { /* シフトアップ閾値回転数を超えた */
             if( u8_shift_g_shift_position_req < SHIFT_POSI_MAX )
             {
@@ -394,7 +393,7 @@ static void func_shift_s_shift_position_decide_mode_automatic( void )
                 u8_shift_g_shift_position_req = SHIFT_POSI_MAX;
             }
         }
-        else if( u16_speedsens_g_speed_ave_1stgear <= u16_shift_down_thr_speed )
+        else if( u16_speedsens_g_rpm_ary[ SPEEDSENS_CH_1STGEAR ] <= u16_shift_down_thr_speed )
         {
             if( u8_shift_g_shift_position_req > SHIFT_POSI_1 )
             {
@@ -418,7 +417,7 @@ static void func_shift_s_shift_position_decide_mode_automatic( void )
         u16_shift_s_auto_position_cnt = (u16)0;
     }
 
-    GPIO_OUT_DEBUG = CLEAR;
+
 }
 
 
@@ -529,7 +528,7 @@ static void func_shift_s_shift_mode_decide( void )
     }
 
     /* 停止状態でのみ、シフト操作モードの変更を許可する */
-    if( u16_speedsens_g_speed_ave_1stgear <= SHIFT_DRIVE_STOP_SPEED )               /* 1次ギヤで止まってる判定する場合、0,1,2のシフトレバーが接続状態でないとダメなので、条件としては微妙かも */
+    if( u16_speedsens_g_rpm_ary[ SPEEDSENS_CH_1STGEAR ] <= SHIFT_DRIVE_STOP_SPEED )               /* 1次ギヤで止まってる判定する場合、0,1,2のシフトレバーが接続状態でないとダメなので、条件としては微妙かも */
     { /* 現在車は停止している */
         u8_shift_g_shift_mode = u8_shift_s_shift_mode_req;          /* 現在の変速モード要求を反映する */
     }
@@ -601,7 +600,7 @@ static void func_shift_s_shift_sequence( void )
             /* 停止判定 */
             if( u16_shift_s_clutch_off_cnt > SHIFT_CLUTCH_OFF_BY_STOP_TIME )
             { /* 車が動作中 or 変速後 or クラッチミート完了後 */
-                if( u16_speedsens_g_speed_ave_1stgear <= (u16)200 )       /* @@回転を下限値まで見れるようにしておかないと、この条件が働いて無限に始動できないかもぉ？ */
+                if( u16_speedsens_g_rpm_ary[ SPEEDSENS_CH_1STGEAR ] <= (u16)200 )       /* @@回転を下限値まで見れるようにしておかないと、この条件が働いて無限に始動できないかもぉ？ */
                 { /* 一定時間たってるのに車に動きがない */
                     if( u8_sc_s_throttle_dir == SC_THROTTLE_DIR_NONE )
                     { /* スロットル開けておらず停止している：単純に停止した */
@@ -744,27 +743,27 @@ static void func_shift_s_blip_control( void )
             /* こっちのほうが実装単純 */
             if( u8_shift_s_shift_dir == SHIFT_POSITION_UP )
             { /* シフトアップしようとしている */
-                if( u16_speedsens_g_speed_ave_mtr < u16_speedsens_g_speed_ave_1stgear )
+                if( u16_speedsens_g_rpm_ary[SPEEDSENS_CH_MTR]  < u16_speedsens_g_rpm_ary[ SPEEDSENS_CH_1STGEAR ] )
                 { /* エンジン回転数 < 負荷軸側回転数 になるまで回転数が下がった */
                     u8_blip_sts = SET;
                 }
             }
             else if( u8_shift_s_shift_dir == SHIFT_POSITION_DOWN )
             { /* シフトダウンしようとしている */
-                if( u16_speedsens_g_speed_ave_mtr > u16_speedsens_g_speed_ave_1stgear )
+                if( u16_speedsens_g_rpm_ary[SPEEDSENS_CH_MTR] > u16_speedsens_g_rpm_ary[ SPEEDSENS_CH_1STGEAR ] )
                 { /* エンジン回転数 > 負荷軸側回転数 になるまで回転数が上がった */
                     u8_blip_sts = SET;
                 }
             }
 #else
             /* モータとギヤの回転数の一致度合いを判断 */
-            if( u16_speedsens_g_speed_ave_mtr > u16_speedsens_g_speed_ave_1stgear )
+            if( u16_speedsens_g_rpm_ary[ SPEEDSENS_CH_MTR ] > u16_speedsens_g_rpm_ary[ SPEEDSENS_CH_1STGEAR ] )
             {
-                u16_calc_buff = u16_speedsens_g_speed_ave_mtr - u16_speedsens_g_speed_ave_1stgear;
+                u16_calc_buff = u16_speedsens_g_rpm_ary[ SPEEDSENS_CH_MTR ] - u16_speedsens_g_rpm_ary[ SPEEDSENS_CH_1STGEAR ];
             }
             else
             {
-                u16_calc_buff = u16_speedsens_g_speed_ave_1stgear - u16_speedsens_g_speed_ave_mtr;
+                u16_calc_buff = u16_speedsens_g_rpm_ary[ SPEEDSENS_CH_1STGEAR ] - u16_speedsens_g_rpm_ary[ SPEEDSENS_CH_MTR ];
             }
 
             if( u16_calc_buff < SHIFT_BLIP_SPEED_ACCURACY )     /* PIの応答にもよるが、大体で合わせる */

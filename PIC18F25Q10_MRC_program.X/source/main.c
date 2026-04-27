@@ -198,6 +198,8 @@ static void func_main_s_init( void )
     u8_main_s_loop_go = CLEAR;                  /* 初期化 */
     u8_main_s_1ms_task_cnt = (u8)0;            /* 初期化 */
     
+    func_ud_g_init();
+
     /* 入力処理 */
     func_adc_g_init();
     func_int_g_init();

@@ -13,6 +13,25 @@
 #include "./tools/servo.h"
 
 
+/* デバッグ変数 */
+u16 u16_ud_debug_output0;
+u16 u16_ud_debug_output1;
+u16 u16_ud_debug_output2;
+u16 u16_ud_debug_output3;
+
+
+/**************************************************************/
+/*  Function:                                                 */
+/*  初期化関数                                                 */
+/**************************************************************/
+void func_ud_g_init( void )
+{
+    u16_ud_debug_output0 = (u16)0;
+    u16_ud_debug_output1 = (u16)0;
+    u16_ud_debug_output2 = (u16)0;
+    u16_ud_debug_output3 = (u16)0;
+}
+
 
 /* 全ファイル共通で使いたい関数のみ定義する */
 

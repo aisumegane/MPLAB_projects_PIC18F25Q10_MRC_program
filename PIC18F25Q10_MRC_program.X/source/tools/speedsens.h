@@ -29,17 +29,17 @@ typedef struct speed_status_def
     u16 *u16_p_capture_buff;      /* キャプチャバッファの先頭要素へのポインタ */        /* @@キャプチャ保存の配列の型サイズと合わせないと、ポインタ指定で代入するとき上位ビットが消えるので注意 */
     u16 u16_capture_ave;        /* キャプチャバッファの平均値 */
     u16 u16_speed_ave;          /* 回転数の平均値 */
-}ts_speed_status;
+}ts_speed_status_by_capture;
 
 extern void func_speedsens_g_main( void );
 extern void func_speedsens_g_init( void );
 
-extern void func_speedsens_g_collect_capture( u16 u16_capture, ts_speed_status *sts );
-extern void func_speedsens_g_reset_capture_sts( ts_speed_status *sts );
+extern void func_speedsens_g_collect_capture( u16 u16_capture, ts_speed_status_by_capture *sts );
+extern void func_speedsens_g_reset_capture_sts( ts_speed_status_by_capture *sts );
 
-extern ts_speed_status speedsens_status[ SPEEDSENS_CH_NUM ];
-extern u16 u16_speedsens_g_speed_ave_mtr;
-extern u16 u16_speedsens_g_speed_ave_1stgear;
+extern ts_speed_status_by_capture speedsens_status[ SPEEDSENS_CH_NUM ];
+extern u16 u16_speedsens_g_rpm_ary[ SPEEDSENS_CH_NUM ];
+
 
 #ifdef	__cplusplus
 }

@@ -351,8 +351,8 @@ static u16 func_speedsens_s_calc_low_speed( u8 u8_speedsens_ch, gpio_in gpio_in_
         low_speedsens_status[ u8_speedsens_ch ].u16_capture_cnt_now++;
     }
 
-    if( ( gpio_in_reset_source.u8_state == SET ) &&             /* フィルタ分遅れるが、全体的に位相ずれするだけなら問題ないはず??? */
-        ( gpio_in_reset_source.u8_state_bf != CLEAR ) )
+    if( ( gpio_in_reset_source.u8_state    == SET   ) &&             /* フィルタ分遅れるが、全体的に位相ずれするだけなら問題ないはず??? */
+        ( gpio_in_reset_source.u8_state_bf == CLEAR ) )
     { /* エッジを検知した */
         low_speedsens_status[ u8_speedsens_ch ].u16_capture_cnt_save = low_speedsens_status[ u8_speedsens_ch ].u16_capture_cnt_now;      /* 現在のキャプチャ値を保存 */
         low_speedsens_status[ u8_speedsens_ch ].u16_capture_cnt_now = (u16)0;       /* キャプチャカウントクリア */

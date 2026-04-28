@@ -69,7 +69,7 @@
 #define SHIFT_POSI_7_APPR_RPM       ((u16)11000)
 #define SHIFT_POSI_8_APPR_RPM       ((u16)14000)
 
-#define SHIFT_POSI_CHG_HIS_MAX                ((u8)500)                /* 変速のヒステリシス最大値(実質、レブリミット) */
+#define SHIFT_POSI_CHG_HIS_MAX      ((u16)200)                /* 変速のヒステリシス最大 回転数[rpm] */
 
 #define SHIFT_POSI_REMAIN_CNT       ((u16)300)       /* サーボの稼働累計時間よりは長くしないとダメ。 */
 
@@ -285,9 +285,12 @@ static void func_shift_s_shift_position_decide_mode_manual( void )
 /**************************************************************/
 static void func_shift_s_shift_position_decide_mode_automatic( void )
 {
+    u16 u16_shift_position_rpm_diff;        /* 上の */
     u16 u16_shift_up_thr_speed;
     u16 u16_shift_down_thr_speed;
+
     u8 u8_shift_chg_dir;
+    u16 u16_calc_buff;
     u16 u16_shift_his_speed;
     u32 u32_calc_buff;
     
@@ -304,29 +307,39 @@ static void func_shift_s_shift_position_decide_mode_automatic( void )
     u8_shift_start_range = (u8)0;
 
 
+    u8 u8_shift_up_enable_flag;
+    u8 u8_shift_down_enable_flag;
     
+
+    /*========*/
+    /* 初期化 */
+    /*========*/
+    u8_shift_up_enable_flag = CLEAR;
+    u8_shift_down_enable_flag = CLEAR;
 
     /* グローバル変数取得 */
     u8_shift_position_req_before = u8_shift_g_shift_position_req;
 
-    /* 変速位置固定カウント */
-    /* 変速後は一定時間変速を許可しない */
-    if( u16_shift_s_auto_position_cnt < U16_MAX )
-    {
-        u16_shift_s_auto_position_cnt++;
-    }
     
     /* アクセルON/OFF時の動作設定 */
     /* AT自動車特有の、ある速度域でアクセルON/OFFしても自然に速度がつながる制御の模擬 */
     /* 現在のスピードエリアを判別する */
-    if( u8_sc_s_throttle_dir == SC_THROTTLE_DIR_NONE )
-    { /* アクセル踏まれてない */
-        u8_shift_g_shift_position_req = SHIFT_POSI_0;               /* エンジンブレーキがないことを再現するため、アクセル踏んでないときはニュートラル状態にする */
+    if( ( u8_sc_s_throttle_dir == SC_THROTTLE_DIR_NONE )  &&
+        ( u16_speedsens_g_rpm_ary[ SPEEDSENS_CH_1STGEAR ] == (u16)0 ) )
+    { /* アクセル踏まれてない & 停止状態 */
+        /*======================*/
+        /* ニュートラル状態の固定 */
+        /*======================*/
+        u8_shift_g_shift_position_req = SHIFT_POSI_0;               /* ニュートラル状態：エンジンブレーキがないことを再現する */
     }
     else if( ( u8_sc_s_throttle_dir        != SC_THROTTLE_DIR_NONE ) &&
              ( u8_sc_s_throttle_dir_before == SC_THROTTLE_DIR_NONE ) )
-    { /* 今回がアクセルON初回 */
-        for( u8_shift_start_range = SHIFT_POSI_0; u8_shift_start_range < SHIFT_POSI_MAX; u8_shift_start_range++ )
+    {
+        /*=================================*/
+        /* アクセルON初回のシフト位置決定処理 */
+        /*=================================*/
+        /* 現在の回転数がどのシフトポジションの間にいるか判定しに行く */
+        for( u8_shift_start_range = SHIFT_POSI_0; u8_shift_start_range < ( SHIFT_POSI_NUM - (u8)1 ); u8_shift_start_range++ )
         { /* ※8速目は検索から除外、どのみち7速でbreakできなかったら、8速で出てくるため。 */
             if( u16_speedsens_g_rpm_ary[ SPEEDSENS_CH_1STGEAR ] <= u16_shift_s_shift_posi_50per_rpm_ary[ u8_shift_start_range ] )
             { /* 現在の速度域から、最適な変速開始位置を探す */
@@ -336,88 +349,98 @@ static void func_shift_s_shift_position_decide_mode_automatic( void )
 
         if( u8_shift_start_range == SHIFT_POSI_0 )
         { /* 0速 0rpmで停止判定だった */
-            u8_shift_g_shift_position_req = SHIFT_POSI_1;              /* 始動時：1速を返す */
+            u8_shift_g_shift_position_req = SHIFT_POSI_1;              /* アクセルON & 停止状態 = "始動時" と判断し、ATモードなのでひとまず1速を設定 */
         }
         else
         {
-            u8_shift_g_shift_position_req = u8_shift_start_range;              /* 1~8速を返す */
+            u8_shift_g_shift_position_req = u8_shift_start_range;      /* 1~8速を返す */
         }
     }
     else
-    { /* アクセルONでない 初回でない */
-        ;           /* 初回のシフト位置決定以降は強制上書きしない */
-    }
+    { /* 上記以外... (変な条件で入ってこないか要確認) */
+        /* 注意：ここに来るときは必ず　SHIFT_POSI_1 以上になっている。 */
 
-    /* シフトチェンジのレブリミットレベルを算出する */
-    /* ただし、現在のギヤ位置から見て、最大出力で到達できそうな回転数範囲に制限をかける */
-    /* @@シフトダウンの下限値回転数が、１段下のシフトアップ回転数と被らないように注意する。実測合わせ要検討 */
-    u32_calc_buff = (u32)0;
-    u32_calc_buff = func_ud_g_calcmul_2x2_byte( (u16)u8_rc_g_ch_duty_tbl[RC_DUTY_CH_REV_LIMIT], (u16)SHIFT_POSI_CHG_HIS_MAX );
-    u32_calc_buff = func_ud_g_calcdiv_4x4_byte( u32_calc_buff, (u32)RC_CH_DUTY_100P );
-    u16_shift_chg_thr_rpm_his = (u16)u32_calc_buff;
-    
-    /* シフトチェンジの回転数閾値を計算する */
-    if( u8_shift_g_shift_position_output == SHIFT_POSI_1 )
-    { /* 現在1速：シフトアップのみ可能 */
-        u16_shift_up_thr_speed   = u16_shift_s_shift_posi_50per_rpm_ary[ SHIFT_POSI_1 ] + u16_shift_chg_thr_rpm_his;
-        u16_shift_down_thr_speed = (u16)0;      /* @@ココの値どうしよう... */
-    }
-    else if( u8_shift_g_shift_position_output == SHIFT_POSI_MAX )
-    { /* 現在8速：シフトダウンのみ可能 */
-        u16_shift_up_thr_speed   = U16_MAX;    /* ひとまず変速不可能な回転数にしておく */
-        if( u16_shift_s_shift_posi_50per_rpm_ary[ SHIFT_POSI_MAX ] > u16_shift_chg_thr_rpm_his )
-        {
-            u16_shift_down_thr_speed = u16_shift_s_shift_posi_50per_rpm_ary[ SHIFT_POSI_MAX - (u8)1 ] - u16_shift_chg_thr_rpm_his;
-        }
-    }
-    else
-    { /* "現在" 1～6速 */
-        u16_shift_up_thr_speed = u16_shift_s_shift_posi_50per_rpm_ary[ u8_shift_g_shift_position_output ] + u16_shift_chg_thr_rpm_his;
-        u16_shift_down_thr_speed = u16_shift_s_shift_posi_50per_rpm_ary[ u8_shift_g_shift_position_output ] - u16_shift_chg_thr_rpm_his;
-    }
-    
-    /* 変速処理 */
-    /* 変速要求設定 */
-    if( u16_shift_s_auto_position_cnt > SHIFT_POSI_REMAIN_CNT )
-    { /* 変速後は少し間を置く */
 
-        /* アクセル踏んでいる */
-        if( u16_speedsens_g_rpm_ary[ SPEEDSENS_CH_1STGEAR ] >= u16_shift_up_thr_speed )
-        { /* シフトアップ閾値回転数を超えた */
-            if( u8_shift_g_shift_position_req < SHIFT_POSI_MAX )
-            {
-                u8_shift_g_shift_position_req++;
-            }
-            else
-            {
-                u8_shift_g_shift_position_req = SHIFT_POSI_MAX;
-            }
+        /*==================*/
+        /* 変速許可条件の設定 */
+        /*==================*/
+        /* 配列の範囲外参照を避けるために条件を用意した */
+        if( u8_shift_g_shift_position_req <= ( SHIFT_POSI_MIN + (u8)1 ) )
+        { /* 最小シフト位置 */
+            u8_shift_down_enable_flag = CLEAR;
+            u8_shift_up_enable_flag = SET;          /* シフトアップのみ許可 */
         }
-        else if( u16_speedsens_g_rpm_ary[ SPEEDSENS_CH_1STGEAR ] <= u16_shift_down_thr_speed )
-        {
-            if( u8_shift_g_shift_position_req > SHIFT_POSI_1 )
-            {
-                u8_shift_g_shift_position_req--;
-            }
-            else
-            {
-                u8_shift_g_shift_position_req = SHIFT_POSI_1;               /* ※0速へ戻る判定は、アクセルOFFで行う※ */
-            }
+        else if( u8_shift_g_shift_position_req >= SHIFT_POSI_MAX )
+        { /* 最大シフト位置 */
+            u8_shift_down_enable_flag = SET;        /* シフトダウンのみ許可 */
+            u8_shift_up_enable_flag = CLEAR;
         }
         else
-        { /* 50%出力での変速域内 */
-            ;       /* 現在のシフトポジションを維持 */
+        {
+            u8_shift_up_enable_flag = SET;
+            u8_shift_down_enable_flag = SET;
+        }
+
+        /*=============*/
+        /* 変速実行処理 */
+        /*=============*/
+        if( u8_shift_down_enable_flag == SET )
+        {
+            /* 閾値検索 */
+            /* シフトダウン閾値の決定：現在のギヤ位置の回転数シフトアップ閾値回転数 - ヒステリシス */
+            u16_calc_buff = u16_shift_s_shift_posi_50per_rpm_ary[ u8_shift_g_shift_position_req ] - u16_shift_s_shift_posi_50per_rpm_ary[ u8_shift_g_shift_position_req - (u8)1 ];
+            u32_calc_buff = func_ud_g_calcmul_2x2_byte( u16_calc_buff, (u16)u8_rc_g_ch_duty_tbl[RC_DUTY_CH_REV_LIMIT] );
+            u32_calc_buff = func_ud_g_calcdiv_4x4_byte( u32_calc_buff, (u32)RC_CH_DUTY_100P );
+            u32_calc_buff += (u32)u16_shift_s_shift_posi_50per_rpm_ary[ u8_shift_g_shift_position_req - (u8)1 ];        /* 基準回転数 加算 */
+            /* ヒステリシスを加算 */
+            if( u32_calc_buff > (u32)SHIFT_POSI_CHG_HIS_MAX )
+            {
+                u16_shift_down_thr_speed = (u16)u32_calc_buff - SHIFT_POSI_CHG_HIS_MAX;
+            }
+            else
+            {
+                u16_shift_down_thr_speed = u16_shift_s_shift_posi_50per_rpm_ary[ u8_shift_g_shift_position_req - (u8)1 ];       /* ひとまず1段下の適正回転数をシフトダウン閾値の下限としておく */
+            }
+
+            /* 変速 */
+            if( u16_speedsens_g_rpm_ary[ SPEEDSENS_CH_1STGEAR ] <= u16_shift_down_thr_speed )
+            {
+                if( u8_shift_g_shift_position_req > (SHIFT_POSI_MIN + (u8)2) )
+                {
+                    u8_shift_g_shift_position_req--;
+                }
+                else
+                {
+                    u8_shift_g_shift_position_req = SHIFT_POSI_1;               /* ※0速へ戻る判定は、アクセルOFF判定で行う */
+                }
+            }
+        }
+
+        if( u8_shift_up_enable_flag == SET )
+        {
+            /* 閾値検索 */
+            /* シフトアップ閾値の決定： */
+            u16_calc_buff = u16_shift_s_shift_posi_50per_rpm_ary[ u8_shift_g_shift_position_req + (u8)1 ] - u16_shift_s_shift_posi_50per_rpm_ary[ u8_shift_g_shift_position_req ];
+            u32_calc_buff = func_ud_g_calcmul_2x2_byte( u16_calc_buff, (u16)u8_rc_g_ch_duty_tbl[RC_DUTY_CH_REV_LIMIT] );
+            u32_calc_buff = func_ud_g_calcdiv_4x4_byte( u32_calc_buff, (u32)RC_CH_DUTY_100P );
+            u32_calc_buff += (u32)u16_shift_s_shift_posi_50per_rpm_ary[ u8_shift_g_shift_position_req ];        /* 基準回転数 加算 */
+            /* ヒステリシスを加算 */
+            u16_shift_up_thr_speed = (u16)u32_calc_buff + SHIFT_POSI_CHG_HIS_MAX;
+            if( u16_shift_up_thr_speed > u16_shift_s_shift_posi_50per_rpm_ary[ u8_shift_g_shift_position_req + (u8)1 ] )
+            { /* 1つ上のギヤ位置での最適回転数を超えてしまった */
+                u16_shift_up_thr_speed = u16_shift_s_shift_posi_50per_rpm_ary[ u8_shift_g_shift_position_req + (u8)1 ];       /* ひとまず1段上の適正回転数をシフトアップ閾値の上限としておく */
+            }
+
+            /* 変速 */
+            if( u16_speedsens_g_rpm_ary[ SPEEDSENS_CH_1STGEAR ] >= u16_shift_up_thr_speed )
+            { /* シフトアップ閾値回転数を超えた */
+                if( u8_shift_g_shift_position_req < SHIFT_POSI_MAX )
+                {
+                    u8_shift_g_shift_position_req++;
+                }
+            }
         }
     }
-
-
-    /* 変速発生時の処理 */
-    if( u8_shift_position_req_before != u8_shift_g_shift_position_req )
-    { /* シフト位置の更新があった */
-        u16_shift_s_auto_position_cnt = (u16)0;
-    }
-
-
 }
 
 
@@ -600,7 +623,7 @@ static void func_shift_s_shift_sequence( void )
             /* 停止判定 */
             if( u16_shift_s_clutch_off_cnt > SHIFT_CLUTCH_OFF_BY_STOP_TIME )
             { /* 車が動作中 or 変速後 or クラッチミート完了後 */
-                if( u16_speedsens_g_rpm_ary[ SPEEDSENS_CH_1STGEAR ] <= (u16)200 )       /* @@回転を下限値まで見れるようにしておかないと、この条件が働いて無限に始動できないかもぉ？ */
+                if( u16_speedsens_g_rpm_ary[ SPEEDSENS_CH_1STGEAR ] <= (u16)200 )
                 { /* 一定時間たってるのに車に動きがない */
                     if( u8_sc_s_throttle_dir == SC_THROTTLE_DIR_NONE )
                     { /* スロットル開けておらず停止している：単純に停止した */

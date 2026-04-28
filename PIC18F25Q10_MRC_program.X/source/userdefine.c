@@ -36,6 +36,7 @@ void func_ud_g_init( void )
 /* 全ファイル共通で使いたい関数のみ定義する */
 
 /* 2byte * 2byte 計算 */
+/* もともとハードウェア乗算使う予定だったが、コンパイラがゆうしゅうなので　このままの実装で問題なさそう？？？ */
 u32  func_ud_g_calcmul_2x2_byte( u16 u16_arg1, u16 u16_arg2 )
 {
     u16 u16_arg1_upper_8bit;

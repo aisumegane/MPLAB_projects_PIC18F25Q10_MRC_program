@@ -26,6 +26,7 @@ extern "C" {
 #define SHIFT_POSI_6                ((u8)6)
 #define SHIFT_POSI_7                ((u8)7)
 #define SHIFT_POSI_8                ((u8)8)
+#define SHIFT_POSI_MIN              SHIFT_POSI_0
 #define SHIFT_POSI_MAX              SHIFT_POSI_8
 #define SHIFT_POSI_NUM              (SHIFT_POSI_8 + (u8)1)
 

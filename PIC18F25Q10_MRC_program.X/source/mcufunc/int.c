@@ -50,8 +50,24 @@ void __interrupt (high_priority) high_isr(void)
     if( INT_FLAG_IOC == SET )
     {
         IOCIE = CLEAR;                      /* IOCAF読み取り中に再度割り込み入ると読み取り失敗するので、処理開始前に禁止する */
+        /* duty検出処理 */
         func_rc_g_duty_detection();         /* ラジコンプロポ duty取得処理 */
         /*INT_FLAG_IOC = CLEAR;*/           /* IOCFはIOC割り込みのステータスビット IOCの割り込みフラグは、上記関数内で個別にクリア */
+
+        /* 回転数検出用 割り込み発生フラグ */
+        /* 処理時間少ないのでduty検出処理には影響ないはず。 */
+        if( IOCCF0 == SET )
+        {
+            func_speedsens_g_edge_detect_mtr();
+            IOCCF0 = CLEAR;
+        }
+        
+        if( IOCCF1 == SET )
+        {
+            func_speedsens_g_edge_detect_1stgear();
+            IOCCF1 = CLEAR;
+        }
+
         IOCIE = SET;
     }
 #endif

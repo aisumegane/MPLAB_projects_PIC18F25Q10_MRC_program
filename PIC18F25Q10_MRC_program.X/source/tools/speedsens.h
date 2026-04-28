@@ -33,9 +33,10 @@ typedef struct speed_status_def
 
 extern void func_speedsens_g_main( void );
 extern void func_speedsens_g_init( void );
-
 extern void func_speedsens_g_collect_capture( u16 u16_capture, ts_speed_status_by_capture *sts );
 extern void func_speedsens_g_reset_capture_sts( ts_speed_status_by_capture *sts );
+extern void func_speedsens_g_edge_detect_mtr( void );
+extern void func_speedsens_g_edge_detect_1stgear( void );
 
 extern ts_speed_status_by_capture speedsens_status[ SPEEDSENS_CH_NUM ];
 extern u16 u16_speedsens_g_rpm_ary[ SPEEDSENS_CH_NUM ];

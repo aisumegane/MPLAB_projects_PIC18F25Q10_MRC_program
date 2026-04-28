@@ -33,7 +33,11 @@ typedef struct speed_status_def_by_mainloop
 
 
 /*  */
+u8 u8_speedsens_g_edge_detect_mtr;
+u8 u8_speedsens_g_edge_detect_1stgear;
 u16 u16_speedsens_g_rpm_ary[ SPEEDSENS_CH_NUM ];
+
+
 ts_speed_status_by_capture speedsens_status[ SPEEDSENS_CH_NUM ];                    /* キャプチャによる回転数計算 ステータス */
 static ts_speed_status_by_mainloop low_speedsens_status[ SPEEDSENS_CH_NUM ];        /* ループタスクによる回転数計算 ステータス */
 
@@ -87,7 +91,7 @@ static const u16 u16_speedsens_low_speed_judge_rpm_ary[ SPEEDSENS_LOWSPEED_JUDGE
 /* 関数プロトタイプ宣言 */
 static void func_speedsens_s_capture_ave_update( ts_speed_status_by_capture *sts );
 static u16 func_speedsens_s_calc_speed( ts_speed_status_by_capture *sts );
-static u16 func_speedsens_s_calc_low_speed( u8 u8_speedsens_ch, gpio_in gpio_in_reset_source );
+static u16 func_speedsens_s_calc_low_speed( u8 u8_speedsens_ch, u8 *u8_reset_source );
 static void func_speedsens_s_speed_update( void );
 
 
@@ -127,6 +131,9 @@ void func_speedsens_g_init( void )
         low_speedsens_status[ u8_loopcnt ].u16_capture_cnt_save = U16_MAX;
         low_speedsens_status[ u8_loopcnt ].u16_speed       = (u16)0;
     }
+
+    u8_speedsens_g_edge_detect_mtr = CLEAR;
+    u8_speedsens_g_edge_detect_1stgear = CLEAR;
 }
 
 
@@ -189,6 +196,30 @@ void func_speedsens_g_reset_capture_sts( ts_speed_status_by_capture *sts )
         sts->u16_p_capture_buff[u8_buff_cnt] = (u16)U16_MAX;      /* 低速側で初期化 */
     }
 }
+
+
+/**************************************************************/
+/*  Function:                                                 */
+/* エッジ入力 検出処理                                          */
+/* 1msタスク側でエッジ検出して低速回転数を計算するために使用する。  */
+/* 処理時間長くしすぎるとduty検出処理に影響出そうなので注意        */
+/**************************************************************/
+void func_speedsens_g_edge_detect_mtr( void )
+{
+    u8_speedsens_g_edge_detect_mtr = SET;
+}
+
+/**************************************************************/
+/*  Function:                                                 */
+/* エッジ入力 検出処理                                          */
+/* 1msタスク側でエッジ検出して低速回転数を計算するために使用する。  */
+/* 処理時間長くしすぎるとduty検出処理に影響出そうなので注意        */
+/**************************************************************/
+void func_speedsens_g_edge_detect_1stgear( void )
+{
+    u8_speedsens_g_edge_detect_1stgear = SET;
+}
+
 
 /**************************************************************/
 /*  Function:                                                 */
@@ -263,7 +294,7 @@ static void func_speedsens_s_speed_update( void )
     /* モータ側回転数計算 */
     /*===================*/
     u16_speed_by_capture[ SPEEDSENS_CH_MTR ]      = func_speedsens_s_calc_speed( &speedsens_status[ SPEEDSENS_CH_MTR ] );
-    u16_speed_by_mainloop[ SPEEDSENS_CH_MTR ]     = func_speedsens_s_calc_low_speed( SPEEDSENS_CH_MTR, gpio_g_speed_mtr_sw );
+    u16_speed_by_mainloop[ SPEEDSENS_CH_MTR ]     = func_speedsens_s_calc_low_speed( SPEEDSENS_CH_MTR, &u8_speedsens_g_edge_detect_mtr );
     if( u16_speed_by_capture[ SPEEDSENS_CH_MTR ] < u16_speed_by_mainloop[ SPEEDSENS_CH_MTR ] )
     { /* 高速側の回転数の方が確度がある */
         u16_speedsens_g_rpm_ary[ SPEEDSENS_CH_MTR ] = u16_speed_by_capture[ SPEEDSENS_CH_MTR ];
@@ -277,7 +308,7 @@ static void func_speedsens_s_speed_update( void )
     /* 1次側ギヤ回転数計算 */
     /*===================*/
     u16_speed_by_capture[ SPEEDSENS_CH_1STGEAR ]  = func_speedsens_s_calc_speed( &speedsens_status[ SPEEDSENS_CH_1STGEAR ] );
-    u16_speed_by_mainloop[ SPEEDSENS_CH_1STGEAR ] = func_speedsens_s_calc_low_speed( SPEEDSENS_CH_1STGEAR, gpio_g_speed_1stgear_sw );
+    u16_speed_by_mainloop[ SPEEDSENS_CH_1STGEAR ] = func_speedsens_s_calc_low_speed( SPEEDSENS_CH_1STGEAR, &u8_speedsens_g_edge_detect_1stgear );
     if( u16_speed_by_capture[ SPEEDSENS_CH_1STGEAR ] < u16_speed_by_mainloop[ SPEEDSENS_CH_1STGEAR ] )
     { /* 高速側の回転数の方が確度がある */
         u16_speedsens_g_rpm_ary[ SPEEDSENS_CH_1STGEAR ] = u16_speed_by_capture[ SPEEDSENS_CH_1STGEAR ];
@@ -335,7 +366,7 @@ static u16 func_speedsens_s_calc_speed( ts_speed_status_by_capture *sts )
 /* ※低速側の回転数更新も兼ねる                                    */
 /* 線形補完までは不要と判断したので、数段のテーブルで実装した。      */
 /****************************************************************/
-static u16 func_speedsens_s_calc_low_speed( u8 u8_speedsens_ch, gpio_in gpio_in_reset_source )
+static u16 func_speedsens_s_calc_low_speed( u8 u8_speedsens_ch, u8 *u8_reset_source )
 {
     u8 u8_loopcnt;
     u16 u16_result;
@@ -351,11 +382,11 @@ static u16 func_speedsens_s_calc_low_speed( u8 u8_speedsens_ch, gpio_in gpio_in_
         low_speedsens_status[ u8_speedsens_ch ].u16_capture_cnt_now++;
     }
 
-    if( ( gpio_in_reset_source.u8_state    == SET   ) &&             /* フィルタ分遅れるが、全体的に位相ずれするだけなら問題ないはず??? */
-        ( gpio_in_reset_source.u8_state_bf == CLEAR ) )
+    if( *u8_reset_source == SET )
     { /* エッジを検知した */
         low_speedsens_status[ u8_speedsens_ch ].u16_capture_cnt_save = low_speedsens_status[ u8_speedsens_ch ].u16_capture_cnt_now;      /* 現在のキャプチャ値を保存 */
         low_speedsens_status[ u8_speedsens_ch ].u16_capture_cnt_now = (u16)0;       /* キャプチャカウントクリア */
+        *u8_reset_source = CLEAR;        /* エッジ未検出状態に設定 */
     }
     else
     { /* エッジが来ない */
@@ -370,10 +401,13 @@ static u16 func_speedsens_s_calc_low_speed( u8 u8_speedsens_ch, gpio_in gpio_in_
         }
     }
 
+#if 0
+    /* デバッグDAC */
     if( u8_speedsens_ch == SPEEDSENS_CH_1STGEAR )
     {
-        func_dac_s_debug_out( (u32)low_speedsens_status[ u8_speedsens_ch ].u16_capture_cnt_save, (u32)600 );
+        fu nc_dac_s_debug_out( (u32)low_speedsens_status[ u8_speedsens_ch ].u16_capture_cnt_save, (u32)600 );
     }
+#endif
     
 
     /*===============*/
@@ -396,6 +430,7 @@ static u16 func_speedsens_s_calc_low_speed( u8 u8_speedsens_ch, gpio_in gpio_in_
     /*===========*/
     return u16_result;
 }
+
 
 
 
